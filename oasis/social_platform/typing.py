@@ -40,7 +40,7 @@ class ActionType(Enum):
     DISLIKE_COMMENT = "dislike_comment"
     UNDO_DISLIKE_COMMENT = "undo_dislike_comment"
     DO_NOTHING = "do_nothing"
-    PURCHASE_PRODUCT = "purchase_product"
+    PURCHASE_PRODUCT = "purchase_product"    # NOTE：这个是OASIS自带的动作，似乎与咱们定义的purchase_product_id名称太类似，容易混淆
     INTERVIEW = "interview"
     JOIN_GROUP = "join_group"
     LEAVE_GROUP = "leave_group"

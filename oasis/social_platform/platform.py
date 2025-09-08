@@ -1688,3 +1688,19 @@ class Platform:
 
         except Exception as e:
             return {"success": False, "error": str(e)}
+        
+    #TODO：这里是LLM在调用tool之后，会在platform里自动地执行动作对应的具体逻辑，这是不可或缺的。
+    async def rate_transaction(self, agent_id: int, transaction_id: int, rating: int, comment: str = ""):
+        pass
+
+    async def list_product(self, agent_id: int, product_info: dict):
+        pass
+
+    async def exit_market(self, agent_id: int):
+        pass
+
+    async def reenter_market(self, agent_id: int):
+        pass
+
+    async def challenge_warrant(self, agent_id: int, post_id: int):
+        pass
