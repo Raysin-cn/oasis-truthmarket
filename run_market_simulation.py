@@ -89,24 +89,78 @@ def get_seller_round_summary(seller_id: int, round_num: int) -> dict:
         conn.close()
     return summary
 
+def clear_market():
+    """将所有在售商品的状态更新为'expired'，实现市场清空。"""
+    if not os.path.exists(DATABASE_PATH):
+        return
+    conn = sqlite3.connect(DATABASE_PATH)
+    cursor = conn.cursor()
+    try:
+        # 将所有状态为 'on_sale' 的商品更新为 'expired'
+        cursor.execute("UPDATE post SET status = 'expired' WHERE status = 'on_sale'")
+        conn.commit()
+        # 获取被影响的行数，用于调试
+        changes = conn.total_changes
+        print(f"Market cleared: {changes} unsold products have been removed from sale.")
+    except sqlite3.Error as e:
+        print(f"数据库错误 (clear_market): {e}")
+    finally:
+        conn.close()
+
+def initialize_market_roles(agent_graph: AgentGraph):
+    """在数据库中为所有智能体设置角色和初始状态。"""
+    print("Initializing market roles in the database...")
+    conn = sqlite3.connect(DATABASE_PATH)
+    cursor = conn.cursor()
+    try:
+        for agent_id, agent in agent_graph.get_agents():
+            role = agent.user_info.profile.get("other_info", {}).get("role")
+            if role == 'seller':
+                # 为卖家设置初始预算和声誉
+                cursor.execute(
+                    "UPDATE user SET role = ?, budget = ?, reputation_score = ?, profit_utility_score = ? WHERE agent_id = ?",
+                    ('seller', 100.0, 1, 0.0, agent_id) # <-- 初始声誉设为 1
+                )
+            elif role == 'buyer':
+                # 为买家设置角色和初始分数
+                cursor.execute(
+                    "UPDATE user SET role = ?, profit_utility_score = ? WHERE agent_id = ?",
+                    ('buyer', 0.0, agent_id)
+                )
+        conn.commit()
+        print("Market roles initialized successfully.")
+    except sqlite3.Error as e:
+        print(f"数据库错误 (initialize_market_roles): {e}")
+    finally:
+        conn.close()
+                
 async def main():
     print("Starting market simulation initialization...")
-
+    
+    if os.path.exists(DATABASE_PATH):
+        os.remove(DATABASE_PATH)
+    
     model = ModelFactory.create(
         model_platform=ModelPlatformType.OPENAI,
         model_type=ModelType.GPT_4O_MINI,
-        
+        api_key="sk-16MLxtQC8IBrLJEliKGLLGUDiK6nTwhbfoaggE7fJIMFLVDy", 
+        url="http://35.220.164.252:3888/v1", 
     )
 
     agent_graph = AgentGraph()
-
+    buyer_personas = [
+        "You are a risk-taker. You are willing to try products from new sellers (reputation 0 or 1) to find good deals and discover new opportunities.",
+        "You are a cautious buyer. You prefer to purchase from sellers with an established positive reputation to minimize risk. You rarely buy from new sellers.",
+        "You are a balanced buyer. You consider both reputation and whether a product is warranted. You might take a chance on a new seller if they offer a warrant."
+    ]
+    
     for i in range(TOTAL_AGENTS):
         if i < NUM_SELLERS:
             role = 'seller'
             persona = "You are a seller in an online marketplace. Your goal is to maximize your profit. You can choose to be honest or deceptive in your listings."
         else:
             role = 'buyer'
-            persona = "You are a buyer in an online marketplace. Your goal is to maximize your utility by purchasing valuable products while avoiding scams."
+            persona = buyer_personas[(i - NUM_SELLERS) % len(buyer_personas)]
         
         user_info = UserInfo(
             user_name=f"agent_{i}",
@@ -138,7 +192,7 @@ async def main():
     await env.reset()
     print(f"Environment initialized. Database at '{DATABASE_PATH}'.")
 
-    
+    initialize_market_roles(agent_graph)
     sellers_history = {i: [] for i in range(NUM_SELLERS)}
     
     
@@ -192,6 +246,7 @@ async def main():
         if buyer_actions:
             await env.step(buyer_actions)
         print("All buyer actions are complete.")
+        clear_market()
         
         for seller_id in range(NUM_SELLERS):
             

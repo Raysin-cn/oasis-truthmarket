@@ -193,11 +193,13 @@ def create_db(db_path: str | None = None):
         with open(group_message_sql_path, "r") as sql_file:
             group_message_sql_script = sql_file.read()
         cursor.executescript(group_message_sql_script)
-
+        
+        # Read and execute the transactions table SQL script:
         transactions_sql_path = osp.join(schema_dir, TRANSACTIONS_SCHEMA_SQL)
         with open(transactions_sql_path, "r") as sql_file:
             transactions_sql_script = sql_file.read()
         cursor.executescript(transactions_sql_script)
+
         # Commit the changes:
         conn.commit()
 

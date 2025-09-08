@@ -40,7 +40,7 @@ class ActionType(Enum):
     DISLIKE_COMMENT = "dislike_comment"
     UNDO_DISLIKE_COMMENT = "undo_dislike_comment"
     DO_NOTHING = "do_nothing"
-    PURCHASE_PRODUCT = "purchase_product"    # NOTE：这个是OASIS自带的动作，似乎与咱们定义的purchase_product_id名称太类似，容易混淆
+    PURCHASE_PRODUCT = "purchase_product"
     INTERVIEW = "interview"
     JOIN_GROUP = "join_group"
     LEAVE_GROUP = "leave_group"
@@ -52,7 +52,7 @@ class ActionType(Enum):
     REENTER_MARKET = "reenter_market"        # 卖家重新进入市场
     PURCHASE_PRODUCT_ID = "purchase_product_id"    # 买家购买商品
     CHALLENGE_WARRANT = "challenge_warrant"  # 买家挑战保证金 
-    RATE_TRANSACTION = "rate_transaction"    # 买家评价交易
+    RATE_TRANSACTION = "rate_transaction"    # 买家评价交易 
 
     @classmethod
     def get_default_twitter_actions(cls):
@@ -82,7 +82,7 @@ class ActionType(Enum):
             cls.FOLLOW,
             cls.MUTE,
         ]
-    
+        
     @classmethod
     def get_warrant_market_actions(cls):
         return [

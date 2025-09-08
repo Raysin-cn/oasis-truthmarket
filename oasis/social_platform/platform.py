@@ -124,6 +124,16 @@ class Platform:
             self.recsys_type,
             self.report_threshold,
         )
+        
+        self.market_params = {
+            "hq_cost": 2.0,
+            "lq_cost": 1.0,
+            "hq_price": 5.0,
+            "lq_price": 3.0,
+            "warrant_escrow": 3.0,
+            "challenge_cost": 1.0,
+            "penalty": 4.0
+        }
 
     async def running(self):
         while True:
@@ -1378,8 +1388,8 @@ class Platform:
                 response = interview_data.get("response", "")
                 interview_id = f"{current_time}_{user_id}"
                 action_info = {
-                    "prompt": prompt,
-                    "response": response,
+                    "prompt": prompt, 
+                    "response": response, 
                     "interview_id": interview_id
                 }
 
@@ -1643,6 +1653,7 @@ class Platform:
 
     async def purchase_product_id(self, agent_id: int, post_id: int):
         """处理买家购买商品的后台逻辑。"""
+        # 这里的 agent_id 是 buyer_id
         buyer_id = agent_id
         
         if self.recsys_type == RecsysType.REDDIT:
@@ -1652,7 +1663,7 @@ class Platform:
             current_time = self.sandbox_clock.get_time_step()
 
         try:
-            # 检查商品是否存在且在售
+            # 1. 检查商品是否存在且在售
             post_check_query = "SELECT user_id, status FROM post WHERE post_id = ?"
             self.pl_utils._execute_db_command(post_check_query, (post_id,))
             post_result = self.db_cursor.fetchone()
@@ -1664,15 +1675,16 @@ class Platform:
             if status != 'on_sale':
                 return {"success": False, "error": f"商品 {post_id} 已售出或下架。"}
 
-            # 更新 post 状态为 'sold'
+            # 2. 更新 post 状态为 'sold'
             post_update_query = "UPDATE post SET is_sold = 1, status = 'sold' WHERE post_id = ?"
             self.pl_utils._execute_db_command(post_update_query, (post_id,), commit=True)
 
+            # 3. 创建一条新的交易记录
             transaction_insert_query = (
                 "INSERT INTO transactions (post_id, seller_id, buyer_id, round_number) "
                 "VALUES (?, ?, ?, ?)"
             )
-
+            # 假设可以跟踪回合数，否则使用占位符
             round_number = self.sandbox_clock.time_step 
             self.pl_utils._execute_db_command(
                 transaction_insert_query,
@@ -1681,6 +1693,7 @@ class Platform:
             )
             transaction_id = self.db_cursor.lastrowid
 
+            # 4. 在 trace 表中记录此动作
             action_info = {"post_id": post_id, "transaction_id": transaction_id}
             self.pl_utils._record_trace(buyer_id, ActionType.PURCHASE_PRODUCT.value, action_info, current_time)
 
@@ -1688,19 +1701,154 @@ class Platform:
 
         except Exception as e:
             return {"success": False, "error": str(e)}
+    
+    async def list_product(self, agent_id: int, product_details: dict):
+        """处理卖家上架商品的后端逻辑。"""
+        seller_id = agent_id
+        current_time = self.sandbox_clock.get_time_step()
         
-    #TODO：这里是LLM在调用tool之后，会在platform里自动地执行动作对应的具体逻辑，这是不可或缺的。
-    async def rate_transaction(self, agent_id: int, transaction_id: int, rating: int, comment: str = ""):
-        pass
 
-    async def list_product(self, agent_id: int, product_info: dict):
-        pass
+        try:
+            adv_q = product_details.get("advertised_quality")
+            prod_q = product_details.get("product_quality")
+            has_warrant = product_details.get("has_warrant", False)
 
-    async def exit_market(self, agent_id: int):
-        pass
+            cost = self.market_params['hq_cost'] if prod_q == 'HQ' else self.market_params['lq_cost']
+            price = self.market_params['hq_price'] if adv_q == 'HQ' else self.market_params['lq_price']
 
-    async def reenter_market(self, agent_id: int):
-        pass
+            insert_query = (
+                "INSERT INTO post (user_id, created_at, true_quality, advertised_quality, price, cost, has_warrant, is_sold, status) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
+            )
+            
+           
+            self.pl_utils._execute_db_command(
+                insert_query,
+                (seller_id, current_time, prod_q, adv_q, price, cost, has_warrant, False, 'on_sale'),
+                commit=True
+            )
+            post_id = self.db_cursor.lastrowid
+            
+            action_info = {"post_id": post_id, "details": product_details}
+            self.pl_utils._record_trace(seller_id, ActionType.LIST_PRODUCT.value, action_info, current_time)
+            
+            return {"success": True, "post_id": post_id}
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+    
+    async def rate_transaction(self, agent_id: int, rating_details: dict):
+        """处理买家评价交易的后端逻辑。"""
+        buyer_id = agent_id
+        transaction_id = rating_details.get("transaction_id")
+        rating = rating_details.get("rating")
+        current_time = self.sandbox_clock.get_time_step()
+        
+        try:
+            # 1. 找到交易并获取卖家ID
+            trans_query = "SELECT seller_id FROM transactions WHERE transaction_id = ?"
+            self.pl_utils._execute_db_command(trans_query, (transaction_id,))
+            result = self.db_cursor.fetchone()
+            if not result:
+                return {"success": False, "error": f"交易 {transaction_id} 未找到。"}
+            seller_id = result[0]
 
+            # 2. 更新交易表中的评分
+            update_trans_query = "UPDATE transactions SET rating = ? WHERE transaction_id = ?"
+            self.pl_utils._execute_db_command(update_trans_query, (rating, transaction_id), commit=True)
+            
+            # 3. 更新卖家的声誉分数
+            update_user_query = "UPDATE user SET reputation_score = reputation_score + ? WHERE user_id = ?"
+            self.pl_utils._execute_db_command(update_user_query, (rating, seller_id), commit=True)
+
+            # 4. 在 trace 表中记录
+            action_info = {"transaction_id": transaction_id, "rating": rating}
+            self.pl_utils._record_trace(buyer_id, ActionType.RATE_TRANSACTION.value, action_info, current_time)
+
+            return {"success": True}
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+            
     async def challenge_warrant(self, agent_id: int, post_id: int):
-        pass
+        """处理买家挑战保证金的后端逻辑。"""
+        buyer_id = agent_id
+        current_time = self.sandbox_clock.get_time_step()
+
+        try:
+            # 1. 查询商品和交易信息
+            query = """
+                SELECT p.seller_id, p.true_quality, p.advertised_quality, p.has_warrant, p.price, t.is_challenged
+                FROM post p JOIN transactions t ON p.post_id = t.post_id
+                WHERE p.post_id = ? AND t.buyer_id = ?
+            """
+            self.pl_utils._execute_db_command(query, (post_id, buyer_id))
+            result = self.db_cursor.fetchone()
+
+            if not result:
+                return {"success": False, "error": f"未找到您(买家ID: {buyer_id})关于商品(ID: {post_id})的交易记录。"}
+            
+            seller_id, true_q, adv_q, has_warrant, price, is_challenged = result
+
+            if not has_warrant:
+                return {"success": False, "error": f"商品 {post_id} 没有保证金，无法挑战。"}
+            if is_challenged:
+                return {"success": False, "error": f"您已经挑战过此交易。"}
+
+            # 2. 扣除买家挑战成本并标记为已挑战
+            challenge_cost = self.market_params['challenge_cost']
+            self.pl_utils._execute_db_command("UPDATE user SET profit_utility_score = profit_utility_score - ? WHERE user_id = ?", (challenge_cost, buyer_id), commit=True)
+            self.pl_utils._execute_db_command("UPDATE transactions SET is_challenged = 1 WHERE post_id = ? AND buyer_id = ?", (post_id, buyer_id), commit=True)
+
+            # 3. 判断挑战结果并结算
+            challenge_successful = (true_q == 'LQ' and adv_q == 'HQ')
+            
+            if challenge_successful:
+                status = 'challenged_success'
+                penalty = self.market_params['penalty']
+                # 惩罚卖家
+                self.pl_utils._execute_db_command("UPDATE user SET profit_utility_score = profit_utility_score - ? WHERE user_id = ?", (penalty, seller_id), commit=True)
+                # 奖励买家 (退款+保证金作为奖励)
+                reward = price + self.market_params['warrant_escrow']
+                self.pl_utils._execute_db_command("UPDATE user SET profit_utility_score = profit_utility_score + ? WHERE user_id = ?", (reward, buyer_id), commit=True)
+            else:
+                status = 'challenged_fail'
+            
+            # 4. 更新商品状态
+            self.pl_utils._execute_db_command("UPDATE post SET status = ? WHERE post_id = ?", (status, post_id), commit=True)
+
+            # 5. 在 trace 表中记录
+            action_info = {"post_id": post_id, "successful": challenge_successful}
+            self.pl_utils._record_trace(buyer_id, ActionType.CHALLENGE_WARRANT.value, action_info, current_time)
+            
+            return {"success": True, "challenge_successful": challenge_successful}
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
+    async def exit_market(self, agent_id: int, message: Any):
+        """处理卖家退出市场的后端逻辑。"""
+        seller_id = agent_id
+        current_time = self.sandbox_clock.get_time_step()
+        try:
+            # 根据设计文档，主要操作是重置声誉分数
+            update_query = "UPDATE user SET reputation_score = 0 WHERE user_id = ?"
+            self.pl_utils._execute_db_command(update_query, (seller_id,), commit=True)
+
+            # 可以在 trace 表中记录此行为
+            self.pl_utils._record_trace(seller_id, ActionType.EXIT_MARKET.value, {}, current_time)
+
+            return {"success": True, "message": f"卖家 {seller_id} 已退出市场，声誉已重置。"}
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
+    async def reenter_market(self, agent_id: int, message: Any):
+        """处理卖家重新进入市场的后端逻辑。"""
+        seller_id = agent_id
+        current_time = self.sandbox_clock.get_time_step()
+        try:
+            # 这个动作主要是概念性的，表明一个意图。
+            # 平台层面可能不需要做数据库修改，因为卖家在下一回合默认就可以行动。
+            # 我们只在 trace 表中记录这个意图即可。
+            self.pl_utils._record_trace(seller_id, ActionType.REENTER_MARKET.value, {}, current_time)
+
+            return {"success": True, "message": f"卖家 {seller_id} 已表示将在下一回合重新进入市场。"}
+        except Exception as e:
+            return {"success": False, "error": str(e)}

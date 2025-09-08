@@ -56,7 +56,12 @@ class SocialAction:
                 self.leave_group,
                 self.send_to_group,
                 self.create_group,
-                self.listen_from_group,
+                self.list_product,
+                self.exit_market,
+                self.reenter_market,
+                self.purchase_product_id,
+                self.challenge_warrant,
+                self.rate_transaction,
             ]
         ]
 
@@ -769,7 +774,7 @@ class SocialAction:
 
     async def exit_market(self):
         """卖家选择在本回合退出市场。"""
-        return await self.perform_action(N one, ActionType.EXIT_MARKET.value)
+        return await self.perform_action(None, ActionType.EXIT_MARKET.value)
 
     async def reenter_market(self):
         """卖家选择在下一回合重新进入市场。"""

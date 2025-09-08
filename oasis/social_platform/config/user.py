@@ -42,12 +42,6 @@ class UserInfo:
         return user_info_template.format(**self.profile)
 
     def to_system_message(self) -> str:
-        if self.recsys_type != "reddit":
-            return self.to_twitter_system_message()
-        else:
-            return self.to_reddit_system_message()
-
-    def to_market_system_message(self) -> str:
         # Router to generate prompt based on the agent's role
         role = self.profile.get("other_info", {}).get("role")
         if role == 'seller':
@@ -55,20 +49,22 @@ class UserInfo:
         elif role == 'buyer':
             return self.to_buyer_master_prompt()
 
+
     def to_seller_master_prompt(self) -> str:
-        """为卖家动态生成Master Prompt，包含历史记录。"""
+        """Generates the master prompt for a Seller Agent in the combined market."""
         
+        # Market rules now combine both reputation and warrant mechanisms
         market_rules = (
-            "1. **Reputation System**: You can rate each transaction with a thumbs up (+1) or a thumbs down (-1). "
-            "Your ratings contribute to the seller's reputation score, which may help you make future purchasing decisions.\n"
-            "2. **Truth Warrant System**: Sellers can offer 'Truth Warrants'. If you purchase a warranted product and find it "
-            "doesn't match the advertised quality, you can challenge it for a cost of $1. "
-            "A successful challenge will refund your purchase price and grant you a bonus."
+            "1. **Reputation System**: Buyers can rate each transaction with a thumbs up (+1) or a thumbs down (-1). "
+            "Your Reputation Score is the sum of these ratings. A higher reputation may attract more buyers.\n"
+            "2. **Truth Warrant System**: You can offer a 'Truth Warrant' for your products. If you falsely advertise a warranted product "
+            "(e.g., advertise HQ, produce LQ) and the buyer challenges it, you will be heavily penalized, "
+            "losing a fixed amount of 4 points from your profit, overriding any sales income."
         )
         
         prompt = f"""
 # CONTEXT
-You are a Seller Agent in a multi-round online marketplace simulation. Your sole objective is to maximize your total profit. This market features both a Reputation and a Truth Warrant system.
+You are a Seller Agent in a multi-round online marketplace simulation. Your sole objective is to maximize your total profit over 7 rounds.
 - Current Round: {{current_round}} / 7
 - Your Current Budget: ${{current_budget}}
 - Your Current Reputation Score: {{reputation_score}}
@@ -77,30 +73,39 @@ You are a Seller Agent in a multi-round online marketplace simulation. Your sole
 {{history_summary}}
 
 # GOAL
-Your only goal is to make strategic decisions to maximize your cumulative profit by the end of the simulation.
+Your goal is to make strategic decisions to maximize your CUMULATIVE profit. Short-term gains from deception might lead to a low reputation, hurting long-term profits.
 
 # MARKET RULES
 {market_rules}
 
-# AVAILABLE ACTIONS
-- `list_product(advertised_quality: str, product_quality: str, has_warrant: bool)`
-- `exit_market()`
+# STRATEGIC OPTIONS (AVAILABLE ACTIONS)
+- `list_product(advertised_quality: str, product_quality: str, has_warrant: bool)`: 
+    - Your primary action to make a profit.
+    - `product_quality`: This is your SECRET choice, deciding whether to produce a High-Quality (HQ) or Low-Quality (LQ) product.
+    - `advertised_quality`: This is what you PUBLICLY claim your product's quality is.
+    - `has_warrant`: A strategic choice to offer a quality guarantee.
+- `exit_market()`: A strategic retreat. If your reputation score is very low (e.g., negative), you can exit the market for a round to RESET YOUR REPUTATION TO 0. This means you earn no profit for the round you exit.
+- `reenter_market()`: If you have previously exited, use this to start selling again.
 
-# PAYOFF MATRIX
-- Cost to Produce HQ: 2, Price: 5, Profit: 3
-- Cost to Produce LQ: 1, Price: 3, Profit: 2
-- Profit from deceptive LQ (advertised as HQ): 4
-- Penalty for a successfully challenged warrant: -4
+# PAYOFF MATRIX (Your Profit Calculation if Product is Sold)
+| Your Secret Production (`product_quality`) | Your Advertisement (`advertised_quality`) | Buyer Action              | Your Profit      |
+| :----------------------------------------- | :---------------------------------------- | :------------------------ | :--------------- |
+| HQ                                         | HQ                                        | Buys (No Challenge)       | price(5) - 2 = 3 |
+| LQ                                         | LQ                                        | Buys (No Challenge)       | price(3) - 1 = 2 |
+| LQ                                         | HQ                                        | Buys (No Challenge)       | price(5) - 1 = 4 |
+| LQ                                         | HQ                                        | Buys & Challenges Warrant | **-4 (Penalty)** |
 
-# TASK
-You MUST list one product this round. Based on your performance in previous rounds (summarized above) and your overall goal, decide your strategy. Choose whether to produce HQ or LQ, whether to advertise honestly, and whether to use a warrant. Provide your step-by-step reasoning, then state your chosen action.
+# TASK (CRITICAL INSTRUCTION)
+Your task is to make a strategic decision and execute ONE of your available actions. You MUST choose either `list_product` or `exit_market` (or `reenter_market` if applicable).
+1.  **Assess your situation**: Analyze your current reputation and past performance from the summary.
+2.  **Formulate a Strategy**: Based on your assessment, decide your plan for this round. For example: "My reputation is good, so I will secretly produce HQ and advertise it as HQ," or "My reputation is negative, so I must exit the market to reset it."
+3.  **Execute the Action**: Provide your step-by-step reasoning and then call the function that matches your strategy. Inaction is not a valid option.
 """
         return prompt.strip()
-    
+
     def to_buyer_master_prompt(self) -> str:
-        """Generates the master prompt for a Buyer Agent in the combined market."""
+        """Generates the final, integrated master prompt for a Buyer Agent."""
         
-        # Market rules and actions for the combined market
         market_rules = (
             "1. **Reputation System**: You can rate each transaction with a thumbs up (+1) or a thumbs down (-1). "
             "Your ratings contribute to the seller's reputation score, which may help you make future purchasing decisions.\n"
@@ -114,14 +119,19 @@ You MUST list one product this round. Based on your performance in previous roun
             "3. `challenge_warrant(post_id: int)` (You can challenge a product that has a warrant)\n"
         )
 
+        persona = self.profile.get("other_info", {}).get("user_profile", "You are a buyer.")
+        
         prompt = f"""
 # CONTEXT
-You are a Buyer Agent in a multi-round online marketplace simulation. Your sole objective is to maximize your total utility. This market features both a Reputation and a Truth Warrant system.
+You are a Buyer Agent in a multi-round online marketplace simulation. Your sole objective is to maximize your total utility.
 - Current Round: {{current_round}} / 7
 - Your Cumulative Utility: {{cumulative_utility}}
 
 # GOAL
 Your only goal is to make strategic decisions to maximize your cumulative utility by the end of the simulation.
+
+# YOUR PERSONALITY
+{persona}
 
 # MARKET RULES
 {market_rules}
@@ -129,17 +139,21 @@ Your only goal is to make strategic decisions to maximize your cumulative utilit
 # AVAILABLE ACTIONS
 {available_actions}
 
-# PAYOFF MATRIX
-- Utility from High-Quality (HQ) product: 8 - price
-- Utility from Low-Quality (LQ) product: 5 - price
-- Cost to Challenge: 1
-- Reward for successful challenge: Purchase price refund + bonus
+# PAYOFF MATRIX (Your Utility Calculation)
+- Challenge Cost: $1
+
+| Product Quality | Advertised Quality | Your Action                      | Your Utility                     |
+| :-------------- | :----------------- | :------------------------------- | :------------------------------- |
+| HQ              | HQ                 | Buy                              | 8 - price                        |
+| LQ              | LQ                 | Buy                              | 5 - price                        |
+| LQ              | HQ                 | Buy (No Challenge)               | 5 - price                        |
+| LQ              | HQ                 | Buy & Challenge Successfully     | 5 - price + refund + bonus       |
 
 # AVAILABLE PRODUCTS
 {{product_listings}}
 
 # TASK
-Based on all the information above, especially the list of available products, decide your action for this round. Consider seller reputations and whether a product is warranted. Provide your step-by-step reasoning, then state your chosen action.
+Based on all the information above, decide your action for this round. Consider the available products, their prices, warranties, and seller reputations. Provide your step-by-step reasoning, and then state your chosen action by calling the appropriate function.
 """
         return prompt.strip()
     

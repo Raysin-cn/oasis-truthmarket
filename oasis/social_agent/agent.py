@@ -103,13 +103,11 @@ class SocialAgent(ChatAgent):
                 ]
             ]
         all_tools = (tools or []) + (self.action_tools or [])
-        super().__init__(
-            system_message=system_message,
-            model=model,
-            scheduling_strategy='random_model',
-            tools=all_tools,
-        )
-        self.max_iteration = max_iteration
+        super().__init__(system_message=system_message,
+                         model=model,
+                         scheduling_strategy='random_model',
+                         tools=all_tools,
+                         max_iteration=max_iteration)
         self.interview_record = interview_record
         self.agent_graph = agent_graph
         self.test_prompt = (
@@ -123,33 +121,55 @@ class SocialAgent(ChatAgent):
             "What do you think Helen should do?")
 
     async def perform_action_by_llm(self):
-        # Get posts:
+        
+        role = self.user_info.profile.get("other_info", {}).get("role")
+
+        # 观察环境 
         env_prompt = await self.env.to_text_prompt()
+        agent_log.info(
+            f"Agent {self.social_agent_id} ({role}) observing environment: "
+            f"{env_prompt}")
+
+        # 根据角色生成不同的用户指令 (User Message)
+        if role == 'seller':
+            # 卖家的决策基于历史，而非当前观察。
+            user_msg_content = (
+                "Based on your system instructions, which include your "
+                "history and current state, you must now execute your "
+                "chosen action for this round."
+            )
+        elif role == 'buyer':
+            # 买家的决策基于观察。
+            # 我们将观察到的市场情况作为其决策的核心依据。
+            user_msg_content = (
+                "You have observed the current state of the market. "
+                "Based on your role, objectives, and the market rules "
+                "outlined in your system instructions, please decide on the "
+                "best action to take now.\n\n"
+                f"## Current Market Observation:\n{env_prompt}"
+            )
+        else:
+            # 为其他任何非市场角色的智能体提供一个默认行为
+            user_msg_content = env_prompt
+
         user_msg = BaseMessage.make_user_message(
             role_name="User",
-            content=(
-                f"Please perform social media actions after observing the "
-                f"platform environments. Notice that don't limit your "
-                f"actions for example to just like the posts. "
-                f"Here is your social media environment: {env_prompt}"))
+            content=user_msg_content
+        )
+        
         try:
-            agent_log.info(
-                f"Agent {self.social_agent_id} observing environment: "
-                f"{env_prompt}")
             response = await self.astep(user_msg)
-            for tool_call in response.info['tool_calls']:
-                action_name = tool_call.tool_name
-                args = tool_call.args
-                agent_log.info(f"Agent {self.social_agent_id} performed "
-                               f"action: {action_name} with args: {args}")
-                if action_name not in ALL_SOCIAL_ACTIONS:
-                    agent_log.info(
-                        f"Agent {self.social_agent_id} get the result: "
-                        f"{tool_call.result}")
-                # Abort graph action for if 100w Agent
-                # self.perform_agent_graph_action(action_name, args)
+            if response.info and 'tool_calls' in response.info:
+                for tool_call in response.info['tool_calls']:
+                    action_name = tool_call.tool_name
+                    args = tool_call.args
+                    agent_log.info(f"Agent {self.social_agent_id} performed "
+                                f"action: {action_name} with args: {args}")
 
-                return response
+            else:
+                agent_log.warning(f"Agent {self.social_agent_id} did not perform any action.")
+            
+            return response
         except Exception as e:
             agent_log.error(f"Agent {self.social_agent_id} error: {e}")
             return e

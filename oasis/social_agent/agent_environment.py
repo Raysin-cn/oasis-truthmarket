@@ -17,8 +17,8 @@ import json
 import sqlite3
 from abc import ABC, abstractmethod
 from string import Template
-import os
 
+import os
 from oasis.social_agent.agent_action import SocialAction
 from oasis.social_platform.database import get_db_path
 
@@ -30,6 +30,30 @@ class Environment(ABC):
         r"""Convert the environment to text prompt."""
         raise NotImplementedError
 
+def get_product_listings_for_env() -> str:
+    """从数据库查询所有在售商品并格式化为字符串。"""
+    DATABASE_PATH = 'market_sim.db' # 确保文件名一致
+    if not os.path.exists(DATABASE_PATH):
+        return "No products are currently on sale."
+        
+    conn = sqlite3.connect(DATABASE_PATH)
+    cursor = conn.cursor()
+    listings = "No products are currently on sale."
+    try:
+        cursor.execute(
+            "SELECT post_id, user_id, advertised_quality, price, has_warrant FROM post WHERE status = 'on_sale'"
+        )
+        products = cursor.fetchall()
+        if products:
+            listings = "Here is the list of products currently on sale:\n"
+            for p in products:
+                warrant_info = " (Warranted)" if p[4] else ""
+                listings += f"- Product ID: {p[0]}, Seller ID: {p[1]}, Advertised Quality: {p[2]}, Price: ${p[3]:.2f}{warrant_info}\n"
+    except sqlite3.Error as e:
+        print(f"数据库查询错误 (get_product_listings_for_env): {e}")
+    finally:
+        conn.close()
+    return listings
 
 class SocialEnvironment(Environment):
     followers_env_template = Template("I have $num_followers followers.")
@@ -52,13 +76,14 @@ class SocialEnvironment(Environment):
         "$posts_env\npick one you want to perform action that best "
         "reflects your current inclination based on your profile and "
         "posts content. Do not limit your action in just `like` to like posts")
-
+    
     market_env_template = Template(
         "Current available products:\n$products")
 
     def __init__(self, action: SocialAction):
         self.action = action
-        self.is_market_sim = False
+        # === market-sim: 添加一个标志位来区分模式 ===
+        self.is_market_sim = False 
 
     async def get_posts_env(self) -> str:
         posts = await self.action.refresh()
@@ -120,32 +145,7 @@ class SocialEnvironment(Environment):
             groups_env = "No groups."
         return groups_env
 
-    async def get_product_listings_for_env() -> str:
-    """从数据库查询所有在售商品并格式化为字符串。"""
-    DATABASE_PATH = 'market_sim.db' 
-    if not os.path.exists(DATABASE_PATH):
-        return "No products are currently on sale."
-        
-    conn = sqlite3.connect(DATABASE_PATH)
-    cursor = conn.cursor()
-    listings = "No products are currently on sale."
-    try:
-        cursor.execute(
-            "SELECT post_id, user_id, advertised_quality, price, has_warrant FROM post WHERE status = 'on_sale'"
-        )
-        products = cursor.fetchall()
-        if products:
-            listings = "Here is the list of products currently on sale:\n"
-            for p in products:
-                warrant_info = " (Warranted)" if p[4] else ""
-                listings += f"- Product ID: {p[0]}, Seller ID: {p[1]}, Advertised Quality: {p[2]}, Price: ${p[3]:.2f}{warrant_info}\n"
-    except sqlite3.Error as e:
-        print(f"数据库查询错误 (get_product_listings_for_env): {e}")
-    finally:
-        conn.close()
-    return listings
-
-    async def get_market_environment(self) -> str:
+    def get_market_environment(self) -> str:
         """为市场模拟获取环境信息，直接展示商品列表。"""
         products = get_product_listings_for_env()
         return self.market_env_template.substitute(products=products)
@@ -158,7 +158,7 @@ class SocialEnvironment(Environment):
     ) -> str:
         if self.is_market_sim:
             return self.get_market_environment()
-        else:    
+        else:
             followers_env = (await self.get_followers_env()
                             if include_follows else "No followers.")
             follows_env = (await self.get_follows_env()
