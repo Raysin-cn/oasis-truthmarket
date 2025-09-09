@@ -108,6 +108,7 @@ This is the first round. To start the market, **you MUST list a product**. Based
     - If you are a **deceptive seller**, you might see a high reputation as an opportunity to deceive.
     - If you are a **strategic seller**, you will weigh the risk and reward of deception vs. honesty.
 3.  **Execute the Action**: You MUST call one of the available functions: `list_product`, `exit_market` (only if reputation is negative), or `reenter_market`. Provide your step-by-step reasoning first.
+
 """
         return prompt.strip()
 

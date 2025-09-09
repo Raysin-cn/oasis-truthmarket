@@ -1704,13 +1704,11 @@ class Platform:
         seller_id = agent_id
         current_time = self.sandbox_clock.get_time_step()
         
-
         try:
             adv_q = product_details.get("advertised_quality")
             prod_q = product_details.get("product_quality")
             has_warrant = product_details.get("has_warrant", False)
-            # 从 product_details 中获取 round_number
-            round_number = product_details.get("round_number")
+            round_number = self.sandbox_clock.get_time_step()
 
             cost = self.market_params['hq_cost'] if prod_q == 'HQ' else self.market_params['lq_cost']
             price = self.market_params['hq_price'] if adv_q == 'HQ' else self.market_params['lq_price']

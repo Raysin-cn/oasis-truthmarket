@@ -762,23 +762,25 @@ class SocialAction:
         return await self.perform_action(self.agent_id,
                                          ActionType.LISTEN_FROM_GROUP.value)
 
-    async def list_product(self, advertised_quality: str, product_quality: str, has_warrant: bool, round_number: int):
+    async def list_product(self, advertised_quality: str, product_quality: str, has_warrant: bool):
         """
         Lists a product for sale in the market for the current round.
 
         Args:
-            advertised_quality (str): The quality of the product advertised to buyers. Must be 'HQ' or 'LQ'.
-            product_quality (str): The true quality of the product being produced. Must be 'HQ' or 'LQ'.
-            has_warrant (bool): Whether to offer a truth warrant for the product.
-            round_number (int): The current simulation round number.
+            advertised_quality (str): The quality of the product advertised to 
+                                    buyers. Must be 'HQ' or 'LQ'.
+            product_quality (str): The true quality of the product being 
+                                    produced. Must be 'HQ' or 'LQ'.
+            has_warrant (bool): Whether to offer a truth warrant for the 
+                                    product.
         """
         product_details = {
             "advertised_quality": advertised_quality,
             "product_quality": product_quality,
             "has_warrant": has_warrant,
-            "round_number": round_number, # <--- 添加这一行
         }
-        return await self.perform_action(product_details, ActionType.LIST_PRODUCT.value)
+        return await self.perform_action(product_details, 
+                                        ActionType.LIST_PRODUCT.value)
 
     async def exit_market(self):
         """
