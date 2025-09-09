@@ -18,28 +18,50 @@ SIMULATION_ROUNDS = 7
 DATABASE_PATH = 'market_sim.db'
 
 
-def get_agent_state(agent_id: int, role: str) -> dict:
+def get_agent_state(agent_id: int, role: str, round_num: int = -1) -> dict:
+    """获取智能体在特定回合或当前的状态。"""
     if not os.path.exists(DATABASE_PATH):
-        return {'current_budget': 100.0, 'reputation_score': 0, 'cumulative_utility': 0.0}
+        # 如果是卖家，返回初始预算和声誉
+        if role == 'seller':
+            return {'current_budget': 100.0, 'reputation_score': 1}
+        # 如果是买家，返回初始效用
+        else:
+            return {'cumulative_utility': 0}
+
     conn = sqlite3.connect(DATABASE_PATH)
     cursor = conn.cursor()
-    state = {'current_budget': 100.0, 'reputation_score': 0, 'cumulative_utility': 0.0}
+    
+    state = {}
     try:
         if role == 'seller':
-            cursor.execute("SELECT budget, reputation_score FROM user WHERE agent_id = ?", (agent_id,))
+            # 如果提供了有效的 round_num，则查询该回合的 trace 记录来回溯状态
+            
+            cursor.execute(
+                "SELECT budget, reputation_score FROM user WHERE user_id = ?",
+                (agent_id,)
+            )
             result = cursor.fetchone()
-            if result:
-                state['current_budget'] = result[0] if result[0] is not None else 100.0
-                state['reputation_score'] = result[1] if result[1] is not None else 0
+            state['current_budget'] = result[0] if result else 100.0
+            state['reputation_score'] = result[1] if result else 1
+        
         elif role == 'buyer':
-            cursor.execute("SELECT profit_utility_score FROM user WHERE agent_id = ?", (agent_id,))
+            cursor.execute(
+                "SELECT profit_utility_score FROM user WHERE user_id = ?",
+                (agent_id,)
+            )
             result = cursor.fetchone()
-            if result:
-                state['cumulative_utility'] = result[0] if result[0] is not None else 0.0
+            state['cumulative_utility'] = result[0] if result and result[0] is not None else 0
+    
     except sqlite3.Error as e:
         print(f"数据库查询错误 (get_agent_state): {e}")
+        # 出错时返回默认值
+        if role == 'seller':
+            state = {'current_budget': 100.0, 'reputation_score': 1}
+        else:
+            state = {'cumulative_utility': 0}
     finally:
         conn.close()
+        
     return state
 
 def get_product_listings() -> str:
@@ -67,22 +89,24 @@ def get_product_listings() -> str:
     return listings
 
 def get_seller_round_summary(seller_id: int, round_num: int) -> dict:
-    """获取卖家在特定回合的上架商品信息。"""
-    summary = {"quality": "Did not list", "sold": "N/A"}
+    """获取卖家在特定回合的上架商品信息和销售状态。"""
+    summary = {"quality": "Did not list", "sold": "No", "price": 0}
     if not os.path.exists(DATABASE_PATH):
         return summary
         
     conn = sqlite3.connect(DATABASE_PATH)
     cursor = conn.cursor()
     try:
+        # 在 post 表中按 user_id 和 round_number 查询
         cursor.execute(
-            "SELECT advertised_quality, is_sold FROM post WHERE user_id = ? AND created_at = ? ORDER BY post_id DESC LIMIT 1",
-            (seller_id, str(round_num - 1)) 
+            "SELECT advertised_quality, is_sold, price FROM post WHERE user_id = ? AND round_number = ? ORDER BY post_id DESC LIMIT 1",
+            (seller_id, round_num) # 查询当前回合 (round_num)
         )
         result = cursor.fetchone()
         if result:
             summary["quality"] = result[0]
             summary["sold"] = "Yes" if result[1] else "No"
+            summary["price"] = result[2] if result[1] else 0
     except sqlite3.Error as e:
         print(f"数据库查询错误 (get_seller_round_summary): {e}")
     finally:
@@ -148,16 +172,23 @@ async def main():
     )
 
     agent_graph = AgentGraph()
+    
+    seller_personas = [
+        "You are an honest seller. Your primary goal is to build a long-term, trustworthy business. You believe that selling High-Quality (HQ) products is the best way to achieve a high reputation and sustainable profit, even if it means lower margins in the short term. You will always produce HQ products and advertise them truthfully.",
+        "You are a deceptive seller. Your main goal is to maximize immediate profit, even at the risk of your reputation. You see advertising LQ products as HQ as a highly profitable, albeit risky, strategy. You will try to deceive buyers whenever you think you can get away with it, especially if your reputation is not yet negative.",
+        "You are a strategic seller. You balance the pursuit of profit with the need to maintain a decent reputation. You might honestly sell HQ products to build up your reputation, but you are not against selling a deceptive LQ product if you feel the market conditions are right (e.g., your reputation is high enough to absorb a potential hit)."
+    ]
+    
     buyer_personas = [
-        "You are a risk-taker. You are willing to try products from new sellers (reputation 0 or 1) to find good deals and discover new opportunities.",
-        "You are a cautious buyer. You prefer to purchase from sellers with an established positive reputation to minimize risk. You rarely buy from new sellers.",
-        "You are a balanced buyer. You consider both reputation and whether a product is warranted. You might take a chance on a new seller if they offer a warrant."
+        "You are a pragmatic buyer focused on maximizing utility. You are willing to purchase from sellers with low or neutral reputation, especially if the product has a warrant, as you understand this is how a new market starts.",
+        "You are an analytical buyer. Your primary goal is to increase your utility score. You analyze the available products and are willing to make a purchase if the potential utility gain is positive, even from new sellers.",
+        "You are a strategic buyer. You understand that rating sellers helps build a healthy market. You are willing to be the first to buy a product to rate the seller and gain information for future rounds."
     ]
     
     for i in range(TOTAL_AGENTS):
         if i < NUM_SELLERS:
             role = 'seller'
-            persona = "You are a seller in an online marketplace. Your goal is to maximize your profit. You can choose to be honest or deceptive in your listings."
+            persona = seller_personas[i % len(seller_personas)]
         else:
             role = 'buyer'
             persona = buyer_personas[(i - NUM_SELLERS) % len(buyer_personas)]
@@ -191,7 +222,6 @@ async def main():
     )
     await env.reset()
     print(f"Environment initialized. Database at '{DATABASE_PATH}'.")
-
     initialize_market_roles(agent_graph)
     sellers_history = {i: [] for i in range(NUM_SELLERS)}
     
@@ -249,11 +279,15 @@ async def main():
         clear_market()
         
         for seller_id in range(NUM_SELLERS):
-            
-            new_state = get_agent_state(seller_id, 'seller')
+        # 注意：这里我们简化了利润计算，直接从销售总结中获取
             round_summary = get_seller_round_summary(seller_id, round_num)
+            new_state = get_agent_state(seller_id, 'seller') 
 
-            profit = new_state['current_budget'] - 100 
+            profit = 0
+            if round_summary["sold"] == "Yes":
+                # 这是一个简化的利润计算，更精确的计算需要减去成本
+                profit = round_summary["price"] 
+
             sellers_history[seller_id].append({
                 "round": round_num,
                 "quality": round_summary["quality"], 
