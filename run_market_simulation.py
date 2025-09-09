@@ -143,7 +143,7 @@ def initialize_market_roles(agent_graph: AgentGraph):
                 # 为卖家设置初始预算和声誉
                 cursor.execute(
                     "UPDATE user SET role = ?, budget = ?, reputation_score = ?, profit_utility_score = ? WHERE agent_id = ?",
-                    ('seller', 100.0, 1, 0.0, agent_id) # <-- 初始声誉设为 1
+                    ('seller', 100.0, 1, 0.0, agent_id) 
                 )
             elif role == 'buyer':
                 # 为买家设置角色和初始分数
@@ -279,13 +279,11 @@ async def main():
         clear_market()
         
         for seller_id in range(NUM_SELLERS):
-        # 注意：这里我们简化了利润计算，直接从销售总结中获取
             round_summary = get_seller_round_summary(seller_id, round_num)
             new_state = get_agent_state(seller_id, 'seller') 
 
             profit = 0
             if round_summary["sold"] == "Yes":
-                # 这是一个简化的利润计算，更精确的计算需要减去成本
                 profit = round_summary["price"] 
 
             sellers_history[seller_id].append({
