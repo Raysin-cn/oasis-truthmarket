@@ -35,7 +35,6 @@ def get_agent_state(agent_id: int, role: str, round_num: int = -1) -> dict:
     try:
         if role == 'seller':
             # 如果提供了有效的 round_num，则查询该回合的 trace 记录来回溯状态
-            
             cursor.execute(
                 "SELECT budget, reputation_score FROM user WHERE user_id = ?",
                 (agent_id,)
@@ -189,9 +188,11 @@ async def main():
         if i < NUM_SELLERS:
             role = 'seller'
             persona = seller_personas[i % len(seller_personas)]
+            available_actions = ActionType.get_seller_actions()
         else:
             role = 'buyer'
             persona = buyer_personas[(i - NUM_SELLERS) % len(buyer_personas)]
+            available_actions = ActionType.get_buyer_actions()
         
         user_info = UserInfo(
             user_name=f"agent_{i}",
@@ -210,7 +211,7 @@ async def main():
             user_info=user_info,
             model=model,
             agent_graph=agent_graph,
-            available_actions=ActionType.get_warrant_market_actions(),
+            available_actions=available_actions, 
         )
         agent.env.is_market_sim =True
         agent_graph.add_agent(agent)
@@ -259,25 +260,58 @@ async def main():
             await env.step(seller_actions)
         print("All seller actions are complete.")
 
-        # 买家行动
-        print(f"\n--- [Round {round_num}] Buyer Action Phase ---")
+        print(f"\n--- [Round {round_num}] Buyer Action Phase 1: Purchase ---")
         buyer_actions = {}
         product_listings_for_this_round = get_product_listings()
+        
+
         for agent_id, agent in agent_graph.get_agents():
              if agent.user_info.profile.get("other_info", {}).get("role") == 'buyer':
                 state = get_agent_state(agent_id, 'buyer')
                 prompt_template = agent.user_info.to_buyer_master_prompt()
+                
                 agent.system_message.content = prompt_template.format(
                     current_round=round_num,
                     cumulative_utility=state['cumulative_utility'],
                     product_listings=product_listings_for_this_round
                 )
                 buyer_actions[agent] = LLMAction()
+        
+        purchase_results = []
         if buyer_actions:
-            await env.step(buyer_actions)
-        print("All buyer actions are complete.")
+            purchase_results = await env.step(buyer_actions)
+        print("All purchase actions are attempted.")
+
+        # 挑战与评价 
+        print(f"\n--- [Round {round_num}] Buyer Action Phase 2: Challenge & Rate ---")
+        post_purchase_actions = {}
+        
+        successful_purchases = [res for res in purchase_results if res and res.get("success")]
+
+        if successful_purchases:
+            for purchase_info in successful_purchases:
+                agent_id = purchase_info.get("agent_id")
+                if agent_id is None: continue
+                
+                agent = agent_graph.get_agent(agent_id)
+
+                prompt_template = agent.user_info.to_buyer_post_purchase_prompt()
+                agent.system_message.content = prompt_template.format(
+                    transaction_id=purchase_info.get("transaction_id"),
+                    post_id=purchase_info.get("post_id"),
+                    advertised_quality=purchase_info.get("advertised_quality"),
+                    true_quality=purchase_info.get("true_quality"),
+                    has_warrant=purchase_info.get("has_warrant")
+                )
+                post_purchase_actions[agent] = LLMAction()
+        
+        if post_purchase_actions:
+            await env.step(post_purchase_actions)
+        print("All post-purchase actions are complete.")
+
         clear_market()
         
+        #  更新历史记录 
         for seller_id in range(NUM_SELLERS):
             round_summary = get_seller_round_summary(seller_id, round_num)
             new_state = get_agent_state(seller_id, 'seller') 

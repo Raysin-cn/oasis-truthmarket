@@ -15,7 +15,7 @@ import asyncio
 import logging
 import os
 from datetime import datetime
-from typing import List, Union
+from typing import Any, Dict, List, Union
 
 from oasis.environment.env_action import LLMAction, ManualAction
 from oasis.social_agent.agent import SocialAgent
@@ -137,65 +137,49 @@ class OasisEnv:
         self, actions: dict[SocialAgent, Union[ManualAction, LLMAction,
                                                List[Union[ManualAction,
                                                           LLMAction]]]]
-    ) -> None:
-        r"""Update the recommendation system and perform the actions.
-
-        Args:
-            actions(dict[SocialAgent, Union[ManualAction, LLMAction,
-                List[Union[ManualAction, LLMAction]]]]): The actions to
-                perform, including the manual(pre-defined) actions and llm
-                actions.
-        Returns:
-            None
-        """
-        # Update the recommendation system
+    ) -> List[Dict[str, Any]]: 
+        r"""Update the recommendation system and perform the actions."""
         await self.platform.update_rec_table()
         env_log.info("update rec table.")
 
-        # Create tasks for both manual and LLM actions
         tasks = []
         for agent, action in actions.items():
             if isinstance(action, list):
                 for single_action in action:
                     if isinstance(single_action, ManualAction):
                         if single_action.action_type == ActionType.INTERVIEW:
-                            # Use the agent's perform_interview method for
-                            # interview actions
-                            interview_prompt = single_action.action_args.get(
-                                "prompt", "")
-                            tasks.append(
-                                self._perform_interview_action(
-                                    agent, interview_prompt))
+                            interview_prompt = single_action.action_args.get("prompt", "")
+                            tasks.append(self._perform_interview_action(agent, interview_prompt))
                         else:
-                            tasks.append(
-                                agent.perform_action_by_data(
-                                    single_action.action_type,
-                                    **single_action.action_args))
+                            tasks.append(agent.perform_action_by_data(single_action.action_type, **single_action.action_args))
                     elif isinstance(single_action, LLMAction):
                         tasks.append(self._perform_llm_action(agent))
             else:
                 if isinstance(action, ManualAction):
                     if action.action_type == ActionType.INTERVIEW:
-                        # Use the agent's perform_interview method for
-                        # interview actions
                         interview_prompt = action.action_args.get("prompt", "")
-                        tasks.append(
-                            self._perform_interview_action(
-                                agent, interview_prompt))
+                        tasks.append(self._perform_interview_action(agent, interview_prompt))
                     else:
-                        tasks.append(
-                            agent.perform_action_by_data(
-                                action.action_type, **action.action_args))
+                        tasks.append(agent.perform_action_by_data(action.action_type, **action.action_args))
                 elif isinstance(action, LLMAction):
                     tasks.append(self._perform_llm_action(agent))
 
-        # Execute all tasks concurrently
-        await asyncio.gather(*tasks)
+        # 执行所有任务并提取、返回结果列表
+        responses = await asyncio.gather(*tasks)
+        results = []
+        for response in responses:
+            if response and hasattr(response, 'info') and response.info and 'tool_calls' in response.info and response.info['tool_calls']:
+                # 提取每个成功调用的结果
+                for tool_call in response.info['tool_calls']:
+                    if tool_call.result:
+                        results.append(tool_call.result)
+
         env_log.info("performed all actions.")
-        # # Control some agents to perform actions
-        # Update the clock
-        if self.platform_type == DefaultPlatformType.TWITTER:
+        
+        if self.platform_type == DefaultPlatformType.REDDIT:
             self.platform.sandbox_clock.time_step += 1
+            
+        return results
 
     async def close(self) -> None:
         r"""Stop the platform and close the environment.

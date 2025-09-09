@@ -64,57 +64,56 @@ class UserInfo:
         persona = self.profile.get("other_info", {}).get("user_profile", "You are a seller.")
 
         prompt = f"""
-# CONTEXT
-You are a Seller Agent in a multi-round online marketplace simulation. Your sole objective is to maximize your total profit over 7 rounds.
-- Current Round: {{current_round}} / 7
-- Your Current Budget: ${{current_budget}}
-- Your Current Reputation Score: {{reputation_score}}
+    # CONTEXT
+    You are a Seller Agent in a multi-round online marketplace simulation. Your sole objective is to maximize your total profit over 7 rounds.
+    - Current Round: {{current_round}} / 7
+    - Your Current Budget: ${{current_budget}}
+    - Your Current Reputation Score: {{reputation_score}}
 
-# PREVIOUS ROUNDS' SUMMARY
-{{history_summary}}
+    # PREVIOUS ROUNDS' SUMMARY
+    {{history_summary}}
 
-# GOAL
-Your goal is to make strategic decisions to maximize your CUMULATIVE profit.
+    # GOAL
+    Your goal is to make strategic decisions to maximize your CUMULATIVE profit.
 
-# YOUR PERSONALITY
-{persona}
+    # YOUR PERSONALITY
+    {persona}
 
-# MARKET RULES
-{market_rules}
+    # MARKET RULES
+    {market_rules}
 
-# STRATEGIC OPTIONS (AVAILABLE ACTIONS)
-- `list_product(advertised_quality: str, product_quality: str, has_warrant: bool)`: Your primary action to make a profit.
-- `exit_market()`: A strategic retreat. You should ONLY use this action if your reputation score is negative. Exiting resets your reputation to 0 but you earn no profit for that round.
-- `reenter_market()`: If you have previously exited, use this to start selling again.
+    # STRATEGIC OPTIONS (AVAILABLE ACTIONS)
+    - `list_product(advertised_quality: str, product_quality: str, has_warrant: bool)`: Your primary action to make a profit.
+    - `exit_market()`: A strategic retreat. You should ONLY use this action if your reputation score is negative. Exiting resets your reputation to 0 but you earn no profit for that round.
+    - `reenter_market()`: If you have previously exited, use this to start selling again.
 
-# PAYOFF MATRIX (Your Profit Calculation if Product is Sold)
-| Your Secret Production (`product_quality`) | Your Advertisement (`advertised_quality`) | Buyer Action              | Your Profit      |
-| :----------------------------------------- | :---------------------------------------- | :------------------------ | :--------------- |
-| HQ                                         | HQ                                        | Buys (No Challenge)       | price(5) - 2 = 3 |
-| LQ                                         | LQ                                        | Buys (No Challenge)       | price(3) - 1 = 2 |
-| LQ                                         | HQ                                        | Buys (No Challenge)       | price(5) - 1 = 4 |
-| LQ                                         | HQ                                        | Buys & Challenges Warrant | **-4 (Penalty)** |
+    # PAYOFF MATRIX (Your Profit Calculation if Product is Sold)
+    | Your Secret Production (`product_quality`) | Your Advertisement (`advertised_quality`) | Buyer Action              | Your Profit      |
+    | :----------------------------------------- | :---------------------------------------- | :------------------------ | :--------------- |
+    | HQ                                         | HQ                                        | Buys (No Challenge)       |         3        |
+    | LQ                                         | LQ                                        | Buys (No Challenge)       |         2        |
+    | LQ                                         | HQ                                        | Buys (No Challenge)       |         4        |
+    | LQ                                         | HQ                                        | Buys & Challenges Warrant |        -4        |
 
-# TASK (CRITICAL INSTRUCTION)
-You must decide and execute EXACTLY ONE action for this round based on your personality, current situation, and the following instructions.
+    # TASK (CRITICAL INSTRUCTION)
+    You must decide and execute EXACTLY ONE action for this round based on your personality, current situation, and the following instructions.
 
-**Special Instruction for Round 1:**
-This is the first round. To start the market, **you MUST list a product**. Based on your personality, decide on the quality and warranty, but you absolutely must call the `list_product` function. 
+    **Special Instruction for Round 1:**
+    - To start the market, **you MUST call the `list_product` function**. 
+    - Based on your personality, decide on the parameters. 
 
-**Instructions for Subsequent Rounds (Round 2 onwards):**
-1.  **Assess your situation**: Analyze your current reputation and past performance from the summary.
-2.  **Formulate a Strategy**: Based on your PERSONALITY, decide your plan.
-    - If you are an **honest seller**, you will likely continue to sell HQ products honestly.
-    - If you are a **deceptive seller**, you might see a high reputation as an opportunity to deceive.
-    - If you are a **strategic seller**, you will weigh the risk and reward of deception vs. honesty.
-3.  **Execute the Action**: You MUST call one of the available functions: `list_product`, `exit_market` (only if reputation is negative), or `reenter_market`. Provide your step-by-step reasoning first.
+    **Instructions for Subsequent Rounds (Round 2 onwards):**
+    1.  **Assess your situation**: Analyze your current reputation and past performance from the summary.
+    2.  **Formulate a Strategy**: Based on your PERSONALITY, decide your plan for this round.
+    3.  **Execute the Action**: You MUST call one of the available functions.
+        - **Default Action Rule**: If your analysis does not lead you to a clear decision to `exit_market` or `reenter_market`, your default action **MUST BE** to `list_product`. You must always take an action.
 
-"""
+    Provide your step-by-step reasoning first, then execute your chosen function call.
+    """
         return prompt.strip()
 
     def to_buyer_master_prompt(self) -> str:
-        """恢复为带有决策流程的、智能的买家Prompt。"""
-        
+        """Generates the master prompt for a Buyer Agent in the combined market."""
         market_rules = (
             "1. **Reputation System**: You can rate each transaction with a thumbs up (+1) or a thumbs down (-1). "
             "Your ratings contribute to the seller's reputation score, which may help you make future purchasing decisions.\n"
@@ -149,27 +148,49 @@ This is the first round. To start the market, **you MUST list a product**. Based
     {available_actions}
 
     # PAYOFF MATRIX (Your Utility Calculation)
-    - Utility from HQ Product = 8 - price
-    - Utility from LQ Product = 5 - price
+    - Challenge Cost: $1
+    | Product Quality | Advertised Quality | Your Action                      | Your Utility                     |
+    | :-------------- | :----------------- | :------------------------------- | :------------------------------- |
+    | HQ              | HQ                 | Buy                              |         3                        |
+    | LQ              | LQ                 | Buy                              |         2                        |
+    | LQ              | HQ                 | Buy (No Challenge)               |        -3                        |
+    | LQ              | HQ                 | Buy & Challenge Successfully     |         4                        |
 
     # AVAILABLE PRODUCTS
     {{product_listings}}
 
     # TASK: YOUR DECISION WORKFLOW FOR THIS ROUND
-    You MUST follow this workflow step-by-step. Inaction is not an option if products are available.
+    Based on all the information above, decide which product you should purchase to maximize your cumulative utility.(you should only purchase once!)
+    """
+        return prompt.strip()
+    
+    def to_buyer_post_purchase_prompt(self) -> str:
+        """购买后的决策Promp"""
+        
+        prompt = f"""
+    # CONTEXT
+    You are a Buyer Agent. You have just completed a purchase. Now you must decide on your post-purchase actions based on the outcome.
+    - Transaction ID: {{transaction_id}}
+    - Product ID: {{post_id}}
+    - Advertised Quality: {{advertised_quality}}
+    - True Quality You Received: {{true_quality}}
+    - Was Warranted: {{has_warrant}}
 
-    **Step 1: Analyze and Decide on a Purchase**
-    - First, review the '# AVAILABLE PRODUCTS' list.
-    - If the list is "No products are currently on sale," your only reasonable action is to wait. You must explain your reasoning for waiting.
-    - If there are products, for EACH product, calculate its potential utility using the Payoff Matrix. Assume advertised quality is true for this calculation.
-    - **Decision Rule**: You MUST purchase the product with the highest potential utility, provided it is greater than 0. If multiple products have the same highest utility, prioritize the one from the seller with the higher reputation. If reputation is also tied, prioritize the one with a warrant.
-    - Execute your decision by calling the `purchase_product_id(post_id=<ID>)` function.
+    # TASK: YOUR POST-PURCHASE WORKFLOW
+    You MUST now consider two actions: challenging and rating.
 
-    **Step 2: Post-Purchase Actions (for subsequent rounds)**
-    - After a purchase, you will find out the product's true quality and can take further actions like `rate_transaction` or `challenge_warrant` in the next rounds.
+    **Step 1: Challenge Decision**
+    - **Rule**: If the product was advertised as 'HQ' but the true quality was 'LQ', AND it was warranted (`Was Warranted: True`), you SHOULD challenge it to maximize your utility.
+    - **Action**: If you decide to challenge, call `challenge_warrant(post_id={{post_id}})`. Otherwise, do not call this function.
 
-    **Your Response for This Turn:**
-    Start by providing your step-by-step reasoning based on the workflow above, then call the single action you have decided on for this turn.
+    **Step 2: Rating Decision**
+    - **Rule**: You MUST always rate the transaction.
+    - If the `advertised_quality` matches the `true_quality`, give a positive rating (`rating=1`).
+    - If they do not match, give a negative rating (`rating=-1`).
+    - **Action**: Call `rate_transaction(transaction_id={{transaction_id}}, rating=<Your Chosen 1 or -1>)`.
+
+    **Your Response:**
+    First, provide a step-by-step reasoning for your decisions. Then, call the chosen function(s). You can call both functions if necessary.
     """
         return prompt.strip()
 

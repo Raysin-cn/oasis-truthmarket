@@ -84,15 +84,23 @@ class ActionType(Enum):
         ]
         
     @classmethod
-    def get_warrant_market_actions(cls):
+    def get_seller_actions(cls):
+        """返回一个只包含卖家专属动作的列表。"""
         return [
             cls.LIST_PRODUCT,
             cls.EXIT_MARKET,
             cls.REENTER_MARKET,
+        ]
+
+    @classmethod
+    def get_buyer_actions(cls):
+        """返回一个只包含买家专属动作的列表。"""
+        return [
             cls.PURCHASE_PRODUCT_ID,
             cls.CHALLENGE_WARRANT,
             cls.RATE_TRANSACTION,
         ]
+        
 
 
 class RecsysType(Enum):
