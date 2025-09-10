@@ -167,8 +167,8 @@ async def main():
     model = ModelFactory.create(
         model_platform=ModelPlatformType.OPENAI,
         model_type=ModelType.GPT_4O_MINI,
-        api_key="sk-16MLxtQC8IBrLJEliKGLLGUDiK6nTwhbfoaggE7fJIMFLVDy", 
-        url="http://35.220.164.252:3888/v1", 
+        api_key="sk-I9Af4lxw1jSCHbOBtV7BikArScsQoTlCRliJo5pQjeHlwpuc", 
+        url="https://api.mnapi.com/v1", 
     )
 
     agent_graph = AgentGraph()
@@ -210,7 +210,7 @@ async def main():
             user_info=user_info,
             model=model,
             agent_graph=agent_graph,
-            available_actions=ActionType.get_warrant_market_actions(),
+            available_actions=ActionType.get_warrant_market_actions(),  # TODO-P1：也许是这里，Buyer和Seller的动作都一样，导致买家和卖家都可能去上架商品，导致市场混乱
         )
         agent.env.is_market_sim =True
         agent_graph.add_agent(agent)
