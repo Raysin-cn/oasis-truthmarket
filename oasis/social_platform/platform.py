@@ -1666,11 +1666,11 @@ class Platform:
                 return {"success": False, "error": f"ID为 {post_id} 的商品未找到。"}
             
             seller_id, status, advertised_quality, true_quality, has_warrant = post_result
-            if status != 'on_sale':
-                return {"success": False, "error": f"商品 {post_id} 已售出或下架。"}
+            #if status != 'on_sale':
+                #return {"success": False, "error": f"商品 {post_id} 已售出或下架。"}
 
-            post_update_query = "UPDATE post SET is_sold = 1, status = 'sold' WHERE post_id = ?"
-            self.pl_utils._execute_db_command(post_update_query, (post_id,), commit=True)
+            #post_update_query = "UPDATE post SET is_sold = 1, status = 'sold' WHERE post_id = ?"
+            #self.pl_utils._execute_db_command(post_update_query, (post_id,), commit=True)
 
             transaction_insert_query = (
                 "INSERT INTO transactions (post_id, seller_id, buyer_id, round_number) "
