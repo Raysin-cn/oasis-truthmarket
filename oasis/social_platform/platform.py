@@ -1653,24 +1653,19 @@ class Platform:
             return {"success": False, "error": str(e)}
 
     async def purchase_product_id(self, agent_id: int, post_id: int):
-        """处理买家购买商品的后台逻辑。"""
+        """处理买家购买商品的后台逻辑，并返回详细结果。"""
         buyer_id = agent_id
-        
-        if self.recsys_type == RecsysType.REDDIT:
-            current_time = self.sandbox_clock.time_transfer(
-                datetime.now(), self.start_time)
-        else:
-            current_time = self.sandbox_clock.get_time_step()
+        current_time = self.sandbox_clock.get_time_step()
 
         try:
-            post_check_query = "SELECT user_id, status FROM post WHERE post_id = ?"
+            post_check_query = "SELECT user_id, status, advertised_quality, true_quality, has_warrant FROM post WHERE post_id = ?"
             self.pl_utils._execute_db_command(post_check_query, (post_id,))
             post_result = self.db_cursor.fetchone()
 
             if not post_result:
                 return {"success": False, "error": f"ID为 {post_id} 的商品未找到。"}
             
-            seller_id, status = post_result
+            seller_id, status, advertised_quality, true_quality, has_warrant = post_result
             if status != 'on_sale':
                 return {"success": False, "error": f"商品 {post_id} 已售出或下架。"}
 
@@ -1681,21 +1676,25 @@ class Platform:
                 "INSERT INTO transactions (post_id, seller_id, buyer_id, round_number) "
                 "VALUES (?, ?, ?, ?)"
             )
-
-            round_number = self.sandbox_clock.time_step 
             self.pl_utils._execute_db_command(
                 transaction_insert_query,
-                (post_id, seller_id, buyer_id, round_number),
+                (post_id, seller_id, buyer_id, current_time),
                 commit=True
             )
             transaction_id = self.db_cursor.lastrowid
 
-
             action_info = {"post_id": post_id, "transaction_id": transaction_id}
-            self.pl_utils._record_trace(buyer_id, ActionType.PURCHASE_PRODUCT.value, action_info, current_time)
+            self.pl_utils._record_trace(buyer_id, ActionType.PURCHASE_PRODUCT_ID.value, action_info, current_time)
 
-            return {"success": True, "transaction_id": transaction_id}
-
+            return {
+                "success": True, 
+                "transaction_id": transaction_id,
+                "post_id": post_id,
+                "seller_id": seller_id,
+                "advertised_quality": advertised_quality,
+                "true_quality": true_quality,
+                "has_warrant": bool(has_warrant)
+            }
         except Exception as e:
             return {"success": False, "error": str(e)}
     
