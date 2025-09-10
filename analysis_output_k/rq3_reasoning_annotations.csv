@@ -1,0 +1,47 @@
+user_id,created_at,action,info,short_hits,long_hits,long_share
+0,2025-09-10 21:48:51.581917,sign_up,"{""name"": ""Agent 0 (Seller)"", ""user_name"": ""agent_0"", ""bio"": ""A seller in the market.""}",0,0,
+1,2025-09-10 21:48:51.605617,sign_up,"{""name"": ""Agent 1 (Seller)"", ""user_name"": ""agent_1"", ""bio"": ""A seller in the market.""}",0,0,
+2,2025-09-10 21:48:51.623617,sign_up,"{""name"": ""Agent 2 (Seller)"", ""user_name"": ""agent_2"", ""bio"": ""A seller in the market.""}",0,0,
+3,2025-09-10 21:48:51.641017,sign_up,"{""name"": ""Agent 3 (Buyer)"", ""user_name"": ""agent_3"", ""bio"": ""A buyer in the market.""}",0,0,
+4,2025-09-10 21:48:51.658297,sign_up,"{""name"": ""Agent 4 (Buyer)"", ""user_name"": ""agent_4"", ""bio"": ""A buyer in the market.""}",0,0,
+5,2025-09-10 21:48:51.675517,sign_up,"{""name"": ""Agent 5 (Buyer)"", ""user_name"": ""agent_5"", ""bio"": ""A buyer in the market.""}",0,0,
+0,2025-09-10 22:07:00.665197,list_product,"{""post_id"": 1, ""details"": {""advertised_quality"": ""HQ"", ""product_quality"": ""HQ"", ""has_warrant"": true}}",0,1,1.0
+1,2025-09-10 22:07:14.776117,list_product,"{""post_id"": 2, ""details"": {""advertised_quality"": ""HQ"", ""product_quality"": ""LQ"", ""has_warrant"": false}}",0,1,1.0
+2,2025-09-10 22:08:36.480877,list_product,"{""post_id"": 3, ""details"": {""advertised_quality"": ""HQ"", ""product_quality"": ""HQ"", ""has_warrant"": false}}",0,1,1.0
+4,2025-09-10 22:18:06.890917,purchase_product_id,"{""post_id"": 1, ""transaction_id"": 1}",0,0,
+4,2025-09-10 22:21:33.326317,rate_transaction,"{""transaction_id"": 1, ""rating"": 1}",0,0,
+3,2025-09-10 22:21:49.963357,purchase_product_id,"{""post_id"": 2, ""transaction_id"": 2}",0,0,
+3,2025-09-10 22:23:33.527857,rate_transaction,"{""transaction_id"": 2, ""rating"": -1}",0,0,
+3,2025-09-10 22:25:53.196037,rate_transaction,"{""transaction_id"": 2, ""rating"": -1}",0,0,
+5,2025-09-10 22:31:09.268357,purchase_product_id,"{""post_id"": 3, ""transaction_id"": 3}",0,0,
+5,2025-09-10 22:48:38.850517,rate_transaction,"{""transaction_id"": 3, ""rating"": 1}",0,0,
+2,2025-09-10 23:09:13.085677,list_product,"{""post_id"": 4, ""details"": {""advertised_quality"": ""HQ"", ""product_quality"": ""HQ"", ""has_warrant"": false}}",0,1,1.0
+3,2025-09-10 23:12:54.322177,purchase_product_id,"{""post_id"": 4, ""transaction_id"": 4}",0,0,
+3,2025-09-10 23:14:16.882177,rate_transaction,"{""transaction_id"": 4, ""rating"": 1}",0,0,
+1,2025-09-10 23:26:52.003117,list_product,"{""post_id"": 5, ""details"": {""advertised_quality"": ""HQ"", ""product_quality"": ""LQ"", ""has_warrant"": false}}",0,1,1.0
+0,2025-09-10 23:27:03.630637,list_product,"{""post_id"": 6, ""details"": {""advertised_quality"": ""HQ"", ""product_quality"": ""HQ"", ""has_warrant"": true}}",0,1,1.0
+3,2025-09-10 23:36:17.999197,purchase_product_id,"{""post_id"": 6, ""transaction_id"": 5}",0,0,
+4,2025-09-10 23:36:47.588137,purchase_product_id,"{""post_id"": 5, ""transaction_id"": 6}",0,0,
+3,2025-09-10 23:38:08.002537,rate_transaction,"{""transaction_id"": 5, ""rating"": 1}",0,0,
+4,2025-09-10 23:43:13.782337,rate_transaction,"{""transaction_id"": 6, ""rating"": -1}",0,0,
+2,2025-09-10 23:52:10.364317,list_product,"{""post_id"": 7, ""details"": {""advertised_quality"": ""HQ"", ""product_quality"": ""HQ"", ""has_warrant"": false}}",0,1,1.0
+1,2025-09-10 23:53:03.137917,list_product,"{""post_id"": 8, ""details"": {""advertised_quality"": ""HQ"", ""product_quality"": ""LQ"", ""has_warrant"": false}}",0,1,1.0
+4,2025-09-11 00:01:22.603537,purchase_product_id,"{""post_id"": 7, ""transaction_id"": 7}",0,0,
+5,2025-09-11 00:03:07.419997,purchase_product_id,"{""post_id"": 8, ""transaction_id"": 8}",0,0,
+4,2025-09-11 00:03:32.966377,rate_transaction,"{""transaction_id"": 7, ""rating"": 1}",0,0,
+5,2025-09-11 00:07:54.952117,rate_transaction,"{""transaction_id"": 8, ""rating"": -1}",0,0,
+0,2025-09-11 00:18:54.796897,list_product,"{""post_id"": 9, ""details"": {""advertised_quality"": ""HQ"", ""product_quality"": ""HQ"", ""has_warrant"": true}}",0,1,1.0
+1,2025-09-11 00:27:21.242437,list_product,"{""post_id"": 10, ""details"": {""advertised_quality"": ""HQ"", ""product_quality"": ""LQ"", ""has_warrant"": false}}",0,1,1.0
+2,2025-09-11 00:28:56.662057,list_product,"{""post_id"": 11, ""details"": {""advertised_quality"": ""HQ"", ""product_quality"": ""HQ"", ""has_warrant"": false}}",0,1,1.0
+3,2025-09-11 00:35:13.369657,purchase_product_id,"{""post_id"": 9, ""transaction_id"": 9}",0,0,
+4,2025-09-11 00:37:39.227257,purchase_product_id,"{""post_id"": 10, ""transaction_id"": 10}",0,0,
+3,2025-09-11 00:38:47.973697,rate_transaction,"{""transaction_id"": 9, ""rating"": 1}",0,0,
+5,2025-09-11 00:40:43.460377,purchase_product_id,"{""post_id"": 11, ""transaction_id"": 11}",0,0,
+5,2025-09-11 00:42:25.700737,rate_transaction,"{""transaction_id"": 11, ""rating"": 1}",0,0,
+4,2025-09-11 00:42:44.337397,rate_transaction,"{""transaction_id"": 10, ""rating"": -1}",0,0,
+2,2025-09-11 00:53:00.271657,list_product,"{""post_id"": 12, ""details"": {""advertised_quality"": ""HQ"", ""product_quality"": ""HQ"", ""has_warrant"": false}}",0,1,1.0
+1,2025-09-11 00:55:41.181457,list_product,"{""post_id"": 13, ""details"": {""advertised_quality"": ""HQ"", ""product_quality"": ""LQ"", ""has_warrant"": false}}",0,1,1.0
+5,2025-09-11 01:03:52.122817,purchase_product_id,"{""post_id"": 12, ""transaction_id"": 12}",0,0,
+5,2025-09-11 01:05:59.157517,rate_transaction,"{""transaction_id"": 12, ""rating"": 1}",0,0,
+4,2025-09-11 01:07:03.799897,purchase_product_id,"{""post_id"": 13, ""transaction_id"": 13}",0,0,
+4,2025-09-11 01:11:16.151737,rate_transaction,"{""transaction_id"": 13, ""rating"": -1}",0,0,

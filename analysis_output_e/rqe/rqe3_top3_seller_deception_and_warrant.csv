@@ -1,0 +1,4 @@
+seller_id,listings,dishonest_ads,warrant_rate,dishonest_ad_rate,sales,dishonest_sales,dishonest_sale_rate
+0,3,0,1.0,0.0,3,0,0.0
+1,5,5,0.0,1.0,5,5,1.0
+2,5,0,0.0,0.0,5,0,0.0
