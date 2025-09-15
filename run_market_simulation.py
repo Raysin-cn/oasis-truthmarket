@@ -183,7 +183,7 @@ async def main():
         agents_num=NUM_SELLERS,
         sys_prompt=SELLER_GENERATION_SYS_PROMPT,
         user_prompt=SELLER_GENERATION_USER_PROMPT,
-        available_actions=ActionType.get_warrant_market_actions(),
+        available_actions=ActionType.get_seller_actions(),
         role="seller",
     )
     
@@ -193,7 +193,7 @@ async def main():
         agents_num=NUM_BUYERS,
         sys_prompt=BUYER_GENERATION_SYS_PROMPT,
         user_prompt=BUYER_GENERATION_USER_PROMPT,
-        available_actions=ActionType.get_warrant_market_actions(),
+        available_actions=ActionType.get_buyer_actions(),
         role="buyer"
     )
     
