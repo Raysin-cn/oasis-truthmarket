@@ -17,6 +17,7 @@ CREATE TABLE post (
     cost DECIMAL(10, 2),
     has_warrant BOOLEAN,
     is_sold BOOLEAN,
+    round_number INTEGER,
     status VARCHAR(20),
     FOREIGN KEY(user_id) REFERENCES user(user_id),
     FOREIGN KEY(original_post_id) REFERENCES post(post_id)

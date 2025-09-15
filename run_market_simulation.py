@@ -23,28 +23,49 @@ SIMULATION_ROUNDS = 7
 DATABASE_PATH = 'market_sim.db'
 
 
-def get_agent_state(agent_id: int, role: str) -> dict:
+def get_agent_state(agent_id: int, role: str, round_num: int = -1) -> dict:
+    """获取智能体在特定回合或当前的状态。"""
     if not os.path.exists(DATABASE_PATH):
-        return {'current_budget': 100.0, 'reputation_score': 0, 'cumulative_utility': 0.0}
+        # 如果是卖家，返回初始预算和声誉
+        if role == 'seller':
+            return {'current_budget': 100.0, 'reputation_score': 1}
+        # 如果是买家，返回初始效用
+        else:
+            return {'cumulative_utility': 0}
+
     conn = sqlite3.connect(DATABASE_PATH)
     cursor = conn.cursor()
-    state = {'current_budget': 100.0, 'reputation_score': 0, 'cumulative_utility': 0.0}
+    
+    state = {}
     try:
         if role == 'seller':
-            cursor.execute("SELECT budget, reputation_score FROM user WHERE agent_id = ?", (agent_id,))
+            # 如果提供了有效的 round_num，则查询该回合的 trace 记录来回溯状态
+            cursor.execute(
+                "SELECT budget, reputation_score FROM user WHERE user_id = ?",
+                (agent_id,)
+            )
             result = cursor.fetchone()
-            if result:
-                state['current_budget'] = result[0] if result[0] is not None else 100.0
-                state['reputation_score'] = result[1] if result[1] is not None else 0
+            state['current_budget'] = result[0] if result else 100.0
+            state['reputation_score'] = result[1] if result else 1
+        
         elif role == 'buyer':
-            cursor.execute("SELECT profit_utility_score FROM user WHERE agent_id = ?", (agent_id,))
+            cursor.execute(
+                "SELECT profit_utility_score FROM user WHERE user_id = ?",
+                (agent_id,)
+            )
             result = cursor.fetchone()
-            if result:
-                state['cumulative_utility'] = result[0] if result[0] is not None else 0.0
+            state['cumulative_utility'] = result[0] if result and result[0] is not None else 0
+    
     except sqlite3.Error as e:
         print(f"数据库查询错误 (get_agent_state): {e}")
+        # 出错时返回默认值
+        if role == 'seller':
+            state = {'current_budget': 100.0, 'reputation_score': 1}
+        else:
+            state = {'cumulative_utility': 0}
     finally:
         conn.close()
+        
     return state
 
 def get_product_listings() -> str:
@@ -72,22 +93,24 @@ def get_product_listings() -> str:
     return listings
 
 def get_seller_round_summary(seller_id: int, round_num: int) -> dict:
-    """获取卖家在特定回合的上架商品信息。"""
-    summary = {"quality": "Did not list", "sold": "N/A"}
+    """获取卖家在特定回合的上架商品信息和销售状态。"""
+    summary = {"quality": "Did not list", "sold": "No", "price": 0}
     if not os.path.exists(DATABASE_PATH):
         return summary
         
     conn = sqlite3.connect(DATABASE_PATH)
     cursor = conn.cursor()
     try:
+        # 在 post 表中按 user_id 和 round_number 查询
         cursor.execute(
-            "SELECT advertised_quality, is_sold FROM post WHERE user_id = ? AND created_at = ? ORDER BY post_id DESC LIMIT 1",
-            (seller_id, str(round_num - 1)) 
+            "SELECT advertised_quality, is_sold, price FROM post WHERE user_id = ? AND round_number = ? ORDER BY post_id DESC LIMIT 1",
+            (seller_id, round_num) # 查询当前回合 (round_num)
         )
         result = cursor.fetchone()
         if result:
             summary["quality"] = result[0]
             summary["sold"] = "Yes" if result[1] else "No"
+            summary["price"] = result[2] if result[1] else 0
     except sqlite3.Error as e:
         print(f"数据库查询错误 (get_seller_round_summary): {e}")
     finally:
@@ -124,7 +147,7 @@ def initialize_market_roles(agent_graph: AgentGraph):
                 # 为卖家设置初始预算和声誉
                 cursor.execute(
                     "UPDATE user SET role = ?, budget = ?, reputation_score = ?, profit_utility_score = ? WHERE agent_id = ?",
-                    ('seller', 100.0, 1, 0.0, agent_id) # <-- 初始声誉设为 1
+                    ('seller', 100.0, 1, 0.0, agent_id) 
                 )
             elif role == 'buyer':
                 # 为买家设置角色和初始分数
@@ -152,6 +175,7 @@ async def main():
         url=os.getenv("OPENAI_BASE_URL"), 
     )
     agent_graph = AgentGraph()
+
 
     # 生成卖家 agents
     print("Generating seller agents...")
@@ -194,7 +218,6 @@ async def main():
     )
     await env.reset()
     print(f"Environment initialized. Database at '{DATABASE_PATH}'.")
-
     initialize_market_roles(agent_graph)
     sellers_history = {i: [] for i in range(NUM_SELLERS)}
     
@@ -227,31 +250,66 @@ async def main():
             await env.step(seller_actions)
         print("All seller actions are complete.")
 
-        # 买家行动
-        print(f"\n--- [Round {round_num}] Buyer Action Phase ---")
+        print(f"\n--- [Round {round_num}] Buyer Action Phase 1: Purchase ---")
         buyer_actions = {}
         product_listings_for_this_round = get_product_listings()
+        
+
         for agent_id, agent in agent_graph.get_agents():
              if agent.user_info.profile.get("other_info", {}).get("role") == 'buyer':
                 state = get_agent_state(agent_id, 'buyer')
                 prompt_template = agent.user_info.to_buyer_master_prompt()
+                
                 agent.system_message.content = prompt_template.format(
                     current_round=round_num,
                     cumulative_utility=state['cumulative_utility'],
                     product_listings=product_listings_for_this_round
                 )
                 buyer_actions[agent] = LLMAction()
+        
+        purchase_results = []
         if buyer_actions:
-            await env.step(buyer_actions)
-        print("All buyer actions are complete.")
+            purchase_results = await env.step(buyer_actions)
+        print("All purchase actions are attempted.")
+
+        # 挑战与评价 
+        print(f"\n--- [Round {round_num}] Buyer Action Phase 2: Challenge & Rate ---")
+        post_purchase_actions = {}
+        
+        successful_purchases = [res for res in purchase_results if res and res.get("success")]
+
+        if successful_purchases:
+            for purchase_info in successful_purchases:
+                agent_id = purchase_info.get("agent_id")
+                if agent_id is None: continue
+                
+                agent = agent_graph.get_agent(agent_id)
+
+                prompt_template = agent.user_info.to_buyer_post_purchase_prompt()
+                agent.system_message.content = prompt_template.format(
+                    transaction_id=purchase_info.get("transaction_id"),
+                    post_id=purchase_info.get("post_id"),
+                    advertised_quality=purchase_info.get("advertised_quality"),
+                    true_quality=purchase_info.get("true_quality"),
+                    has_warrant=purchase_info.get("has_warrant")
+                )
+                post_purchase_actions[agent] = LLMAction()
+        
+        if post_purchase_actions:
+            await env.step(post_purchase_actions)
+        print("All post-purchase actions are complete.")
+
         clear_market()
         
+        #  更新历史记录 
         for seller_id in range(NUM_SELLERS):
-            
-            new_state = get_agent_state(seller_id, 'seller')
             round_summary = get_seller_round_summary(seller_id, round_num)
+            new_state = get_agent_state(seller_id, 'seller') 
 
-            profit = new_state['current_budget'] - 100 
+            profit = 0
+            if round_summary["sold"] == "Yes":
+                profit = round_summary["price"] 
+
             sellers_history[seller_id].append({
                 "round": round_num,
                 "quality": round_summary["quality"], 

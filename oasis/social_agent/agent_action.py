@@ -763,33 +763,62 @@ class SocialAction:
                                          ActionType.LISTEN_FROM_GROUP.value)
 
     async def list_product(self, advertised_quality: str, product_quality: str, has_warrant: bool):
-        """卖家调用此函数来上架一个商品。"""
+        """
+        Lists a product for sale in the market for the current round.
+
+        Args:
+            advertised_quality (str): The quality of the product advertised to 
+                                    buyers. Must be 'HQ' or 'LQ'.
+            product_quality (str): The true quality of the product being 
+                                    produced. Must be 'HQ' or 'LQ'.
+            has_warrant (bool): Whether to offer a truth warrant for the 
+                                    product.
+        """
         product_details = {
             "advertised_quality": advertised_quality,
             "product_quality": product_quality,
             "has_warrant": has_warrant,
         }
-        # 将打包好的商品细节和动作类型发送给后端平台
-        return await self.perform_action(product_details, ActionType.LIST_PRODUCT.value)
+        return await self.perform_action(product_details, 
+                                        ActionType.LIST_PRODUCT.value)
 
     async def exit_market(self):
-        """卖家选择在本回合退出市场。"""
+        """
+        Exits the market for the current round, earning no profit. This action is typically used to reset a negative reputation score back to zero.
+        """
         return await self.perform_action(None, ActionType.EXIT_MARKET.value)
 
     async def reenter_market(self):
-        """卖家选择在下一回合重新进入市场。"""
+        """
+        Re-enters the market in the next round after having exited in a previous round.
+        """
         return await self.perform_action(None, ActionType.REENTER_MARKET.value)
 
-    # Buyer Actions
     async def purchase_product_id(self, post_id: int):
-        """根据指定的ID购买一个商品。"""
-        return await self.perform_action(post_id, ActionType.PURCHASE_PRODUCT.value)
+        """
+        Purchases a product based on its unique post ID.
+
+        Args:
+            post_id (int): The unique identifier for the product listing to be purchased.
+        """
+        return await self.perform_action(post_id, ActionType.PURCHASE_PRODUCT_ID.value)
 
     async def challenge_warrant(self, post_id: int):
-        """ 对已购买的商品发起保证金挑战。"""
+        """
+        Challenges the warrant of a previously purchased product. This should be done if you suspect the advertised quality does not match the true quality.
+
+        Args:
+            post_id (int): The unique identifier of the product whose warrant is being challenged.
+        """
         return await self.perform_action(post_id, ActionType.CHALLENGE_WARRANT.value)
 
     async def rate_transaction(self, transaction_id: int, rating: int):
-        """ 对已完成的交易进行评分。评分: 1 代表赞, -1 代表踩。"""
+        """
+        Rates a completed transaction to influence the seller's reputation.
+
+        Args:
+            transaction_id (int): The unique identifier of the transaction to be rated.
+            rating (int): The rating to give. Use 1 for a positive rating (thumbs up) and -1 for a negative rating (thumbs down).
+        """
         rating_details = {"transaction_id": transaction_id, "rating": rating}
         return await self.perform_action(rating_details, ActionType.RATE_TRANSACTION.value)

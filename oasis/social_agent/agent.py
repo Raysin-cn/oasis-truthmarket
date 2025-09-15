@@ -124,23 +124,18 @@ class SocialAgent(ChatAgent):
         
         role = self.user_info.profile.get("other_info", {}).get("role")
 
-        # 观察环境 
         env_prompt = await self.env.to_text_prompt()
         agent_log.info(
             f"Agent {self.social_agent_id} ({role}) observing environment: "
             f"{env_prompt}")
 
-        # 根据角色生成不同的用户指令 (User Message)
         if role == 'seller':
-            # 卖家的决策基于历史，而非当前观察。
             user_msg_content = (
                 "Based on your system instructions, which include your "
                 "history and current state, you must now execute your "
                 "chosen action for this round."
             )
         elif role == 'buyer':
-            # 买家的决策基于观察。
-            # 我们将观察到的市场情况作为其决策的核心依据。
             user_msg_content = (
                 "You have observed the current state of the market. "
                 "Based on your role, objectives, and the market rules "
@@ -149,7 +144,6 @@ class SocialAgent(ChatAgent):
                 f"## Current Market Observation:\n{env_prompt}"
             )
         else:
-            # 为其他任何非市场角色的智能体提供一个默认行为
             user_msg_content = env_prompt
 
         user_msg = BaseMessage.make_user_message(
@@ -159,13 +153,17 @@ class SocialAgent(ChatAgent):
         
         try:
             response = await self.astep(user_msg)
-            if response.info and 'tool_calls' in response.info:
+            
+            #将 agent_id 注入到返回结果中
+            if response.info and 'tool_calls' in response.info and response.info['tool_calls']:
                 for tool_call in response.info['tool_calls']:
                     action_name = tool_call.tool_name
                     args = tool_call.args
+                    # 将 agent_id 添加到 platform 返回的结果字典中
+                    if isinstance(tool_call.result, dict):
+                        tool_call.result['agent_id'] = self.social_agent_id
                     agent_log.info(f"Agent {self.social_agent_id} performed "
                                 f"action: {action_name} with args: {args}")
-
             else:
                 agent_log.warning(f"Agent {self.social_agent_id} did not perform any action.")
             

@@ -134,7 +134,7 @@ class Platform:
             "challenge_cost": 1.0,
             "penalty": 4.0
         }
-
+        self.db_lock = asyncio.Lock()
     async def running(self):
         while True:
             message_id, data = await self.channel.receive_from()
@@ -177,7 +177,8 @@ class Platform:
                     params[second_param_name] = message
 
                 # Call the function with the parameters
-                result = await action_function(**params)
+                async with self.db_lock:
+                    result = await action_function(**params)
                 await self.channel.send_to((message_id, agent_id, result))
             else:
                 raise ValueError(f"Action {action} is not supported")
@@ -1652,53 +1653,48 @@ class Platform:
             return {"success": False, "error": str(e)}
 
     async def purchase_product_id(self, agent_id: int, post_id: int):
-        """处理买家购买商品的后台逻辑。"""
-        # 这里的 agent_id 是 buyer_id
+        """处理买家购买商品的后台逻辑，并返回详细结果。"""
         buyer_id = agent_id
-        
-        if self.recsys_type == RecsysType.REDDIT:
-            current_time = self.sandbox_clock.time_transfer(
-                datetime.now(), self.start_time)
-        else:
-            current_time = self.sandbox_clock.get_time_step()
+        current_time = self.sandbox_clock.get_time_step()
 
         try:
-            # 1. 检查商品是否存在且在售
-            post_check_query = "SELECT user_id, status FROM post WHERE post_id = ?"
+            post_check_query = "SELECT user_id, status, advertised_quality, true_quality, has_warrant FROM post WHERE post_id = ?"
             self.pl_utils._execute_db_command(post_check_query, (post_id,))
             post_result = self.db_cursor.fetchone()
 
             if not post_result:
                 return {"success": False, "error": f"ID为 {post_id} 的商品未找到。"}
             
-            seller_id, status = post_result
-            if status != 'on_sale':
-                return {"success": False, "error": f"商品 {post_id} 已售出或下架。"}
+            seller_id, status, advertised_quality, true_quality, has_warrant = post_result
+            #if status != 'on_sale':
+                #return {"success": False, "error": f"商品 {post_id} 已售出或下架。"}
 
-            # 2. 更新 post 状态为 'sold'
-            post_update_query = "UPDATE post SET is_sold = 1, status = 'sold' WHERE post_id = ?"
-            self.pl_utils._execute_db_command(post_update_query, (post_id,), commit=True)
+            #post_update_query = "UPDATE post SET is_sold = 1, status = 'sold' WHERE post_id = ?"
+            #self.pl_utils._execute_db_command(post_update_query, (post_id,), commit=True)
 
-            # 3. 创建一条新的交易记录
             transaction_insert_query = (
                 "INSERT INTO transactions (post_id, seller_id, buyer_id, round_number) "
                 "VALUES (?, ?, ?, ?)"
             )
-            # 假设可以跟踪回合数，否则使用占位符
-            round_number = self.sandbox_clock.time_step 
             self.pl_utils._execute_db_command(
                 transaction_insert_query,
-                (post_id, seller_id, buyer_id, round_number),
+                (post_id, seller_id, buyer_id, current_time),
                 commit=True
             )
             transaction_id = self.db_cursor.lastrowid
 
-            # 4. 在 trace 表中记录此动作
             action_info = {"post_id": post_id, "transaction_id": transaction_id}
-            self.pl_utils._record_trace(buyer_id, ActionType.PURCHASE_PRODUCT.value, action_info, current_time)
+            self.pl_utils._record_trace(buyer_id, ActionType.PURCHASE_PRODUCT_ID.value, action_info, current_time)
 
-            return {"success": True, "transaction_id": transaction_id}
-
+            return {
+                "success": True, 
+                "transaction_id": transaction_id,
+                "post_id": post_id,
+                "seller_id": seller_id,
+                "advertised_quality": advertised_quality,
+                "true_quality": true_quality,
+                "has_warrant": bool(has_warrant)
+            }
         except Exception as e:
             return {"success": False, "error": str(e)}
     
@@ -1707,24 +1703,23 @@ class Platform:
         seller_id = agent_id
         current_time = self.sandbox_clock.get_time_step()
         
-
         try:
             adv_q = product_details.get("advertised_quality")
             prod_q = product_details.get("product_quality")
             has_warrant = product_details.get("has_warrant", False)
+            round_number = self.sandbox_clock.get_time_step()
 
             cost = self.market_params['hq_cost'] if prod_q == 'HQ' else self.market_params['lq_cost']
             price = self.market_params['hq_price'] if adv_q == 'HQ' else self.market_params['lq_price']
 
             insert_query = (
-                "INSERT INTO post (user_id, created_at, true_quality, advertised_quality, price, cost, has_warrant, is_sold, status) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
+                "INSERT INTO post (user_id, created_at, true_quality, advertised_quality, price, cost, has_warrant, is_sold, status, round_number) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
             )
             
-           
             self.pl_utils._execute_db_command(
                 insert_query,
-                (seller_id, current_time, prod_q, adv_q, price, cost, has_warrant, False, 'on_sale'),
+                (seller_id, current_time, prod_q, adv_q, price, cost, has_warrant, False, 'on_sale', round_number),
                 commit=True
             )
             post_id = self.db_cursor.lastrowid
