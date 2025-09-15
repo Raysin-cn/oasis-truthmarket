@@ -1,3 +1,0 @@
-type,n_posts,rating_mean,rating_std,n_tx_total
-HQ->HQ,8,1.0,,8
-LQ->HQ,5,-1.0,,5
