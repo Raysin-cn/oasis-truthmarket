@@ -663,7 +663,15 @@ async def generate_agent_from_LLM(agents_num:int,
                                 user_prompt:str,
                                 role:str,
                                 available_actions: list[ActionType] = [],
-                                agent_graph: AgentGraph = None):
+                                agent_graph: AgentGraph = None,
+                                agent_checkpoint_save: bool = True):
+
+    if agent_checkpoint_save == True and os.path.exists(f"./data/agent_checkpoint_{role}.json"):
+        with open(f"./data/agent_checkpoint_{role}.json", "r") as file:
+            user_trait_list = json.load(file)
+    else:
+        user_trait_list = []
+
     model = ModelFactory.create(
         model_type = "gpt-4o-mini",
         model_platform = ModelPlatformType.OPENAI,
@@ -675,8 +683,7 @@ async def generate_agent_from_LLM(agents_num:int,
         system_message = sys_prompt,
     )
 
-    user_trait_list = []
-    for i in range(agents_num):
+    for i in range(agents_num - len(user_trait_list)):
         user_message = user_prompt.format(i)
         user_trait_response = generator_agent.step(user_message)
         
@@ -691,8 +698,12 @@ async def generate_agent_from_LLM(agents_num:int,
         user_trait = json.loads(content)
         user_trait_list.append(user_trait)
 
+    with open(f"./data/agent_checkpoint_{role}.json", "w") as file:
+        json.dump(user_trait_list, file)
+
     if agent_graph is None:
         agent_graph = AgentGraph(backend="igraph")
+    
     for _, agent_info in enumerate(user_trait_list):
         profile = {
             "nodes": [],
@@ -718,4 +729,5 @@ async def generate_agent_from_LLM(agents_num:int,
         )
 
         agent_graph.add_agent(agent)
+
     return agent_graph
