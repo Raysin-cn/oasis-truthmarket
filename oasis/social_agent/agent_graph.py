@@ -233,8 +233,10 @@ class AgentGraph:
             return [(agent_id, self.get_agent(agent_id))
                     for agent_id in agent_ids]
         if self.backend == "igraph":
-            return [(node.index, self.agent_mappings[node.index])
-                    for node in self.graph.vs]
+            # return [(node.index, self.agent_mappings[node.index])
+            #         for node in self.graph.vs]
+            return [(agent_id, self.agent_mappings[agent_id])
+                    for agent_id in self.agent_mappings.keys()]
         else:
             return [(agent_id, self.agent_mappings[agent_id])
                     for agent_id in self.graph.get_all_nodes()]
