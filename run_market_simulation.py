@@ -13,6 +13,7 @@ from prompt import BUYER_PERSONAS, SELLER_PERSONA, format_seller_history, SELLER
 from dotenv import load_dotenv
 load_dotenv(override=True)
 
+
 # 实验配置
 
 TOTAL_AGENTS = 6

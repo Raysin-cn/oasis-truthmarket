@@ -33,6 +33,10 @@ from oasis.social_platform import Channel, Platform
 from oasis.social_platform.config import Neo4jConfig, UserInfo
 from oasis.social_platform.typing import ActionType
 
+import itertools
+
+id_gen = itertools.count(1)  # 从1开始，每次+1
+
 
 async def generate_agents(
     agent_info_path: str,
@@ -704,7 +708,7 @@ async def generate_agent_from_LLM(agents_num:int,
             profile=profile,
             recsys_type='twitter',
         )
-        agent_id = uuid.uuid4()
+        agent_id = next(id_gen)
         agent = SocialAgent(
             agent_id=agent_id,
             user_info=user_info,
