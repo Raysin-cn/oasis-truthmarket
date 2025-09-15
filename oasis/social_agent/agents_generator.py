@@ -16,19 +16,26 @@ from __future__ import annotations
 import ast
 import asyncio
 import json
+import os
 from typing import List, Optional, Union
-
+import uuid
 import pandas as pd
 import tqdm
+from camel.agents import ChatAgent
+from camel.models import ModelFactory
 from camel.memories import MemoryRecord
 from camel.messages import BaseMessage
 from camel.models import BaseModelBackend, ModelManager
-from camel.types import OpenAIBackendRole
+from camel.types import OpenAIBackendRole, ModelPlatformType
 
 from oasis.social_agent import AgentGraph, SocialAgent
 from oasis.social_platform import Channel, Platform
 from oasis.social_platform.config import Neo4jConfig, UserInfo
 from oasis.social_platform.typing import ActionType
+
+import itertools
+
+id_gen = itertools.count(1)  # 从1开始，每次+1
 
 
 async def generate_agents(
@@ -646,4 +653,81 @@ async def generate_twitter_agent_graph(
         )
 
         agent_graph.add_agent(agent)
+    return agent_graph
+
+
+
+
+async def generate_agent_from_LLM(agents_num:int, 
+                                sys_prompt:str, 
+                                user_prompt:str,
+                                role:str,
+                                available_actions: list[ActionType] = [],
+                                agent_graph: AgentGraph = None,
+                                agent_checkpoint_save: bool = True):
+
+    if agent_checkpoint_save == True and os.path.exists(f"./data/agent_checkpoint_{role}.json"):
+        with open(f"./data/agent_checkpoint_{role}.json", "r") as file:
+            user_trait_list = json.load(file)
+    else:
+        user_trait_list = []
+
+    model = ModelFactory.create(
+        model_type = "gpt-4o-mini",
+        model_platform = ModelPlatformType.OPENAI,
+        api_key = os.getenv("OPENAI_API_KEY"),
+        url = os.getenv("OPENAI_BASE_URL"),
+    )
+    generator_agent = ChatAgent(
+        model = model,
+        system_message = sys_prompt,
+    )
+
+    for i in range(agents_num - len(user_trait_list)):
+        user_message = user_prompt.format(i)
+        user_trait_response = generator_agent.step(user_message)
+        
+        # 清理 LLM 返回内容中的 markdown 代码块标记
+        content = user_trait_response.msgs[0].content
+        if content.startswith('```json'):
+            content = content[7:]  # 移除 ```json
+        if content.endswith('```'):
+            content = content[:-3]  # 移除 ```
+        content = content.strip()
+        
+        user_trait = json.loads(content)
+        user_trait_list.append(user_trait)
+
+    with open(f"./data/agent_checkpoint_{role}.json", "w") as file:
+        json.dump(user_trait_list, file)
+
+    if agent_graph is None:
+        agent_graph = AgentGraph(backend="igraph")
+    
+    for _, agent_info in enumerate(user_trait_list):
+        profile = {
+            "nodes": [],
+            "edges": [],
+            "other_info": {},
+        }
+        profile["other_info"]["user_profile"] = agent_info["user_char"]
+        profile["other_info"]["role"] = role
+
+        user_info = UserInfo(
+            name=agent_info["username"],
+            description=agent_info["description"],
+            profile=profile,
+            recsys_type='twitter',
+        )
+        agent_id = next(id_gen)
+        agent = SocialAgent(
+            agent_id=agent_id,
+            user_info=user_info,
+            model=model,
+            agent_graph=agent_graph,
+            available_actions=available_actions,
+        )
+
+        agent_graph.add_agent(agent)
+
     return agent_graph

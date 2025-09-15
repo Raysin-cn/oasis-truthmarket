@@ -7,13 +7,18 @@ from camel.types import ModelPlatformType, ModelType
 from oasis import SocialAgent, AgentGraph, UserInfo, make
 from oasis.environment.env_action import LLMAction
 from oasis.social_platform.typing import ActionType
+from oasis.social_agent.agents_generator import generate_agent_from_LLM
+from prompt import BUYER_PERSONAS, SELLER_PERSONA, format_seller_history, SELLER_GENERATION_SYS_PROMPT, SELLER_GENERATION_USER_PROMPT, BUYER_GENERATION_SYS_PROMPT, BUYER_GENERATION_USER_PROMPT
+
+from dotenv import load_dotenv
+load_dotenv(override=True)
 
 
 # 实验配置
 
 TOTAL_AGENTS = 6
-NUM_SELLERS = 3
-NUM_BUYERS = 3
+NUM_SELLERS = 5
+NUM_BUYERS = 5
 SIMULATION_ROUNDS = 7
 DATABASE_PATH = 'market_sim.db'
 
@@ -166,54 +171,44 @@ async def main():
     model = ModelFactory.create(
         model_platform=ModelPlatformType.OPENAI,
         model_type=ModelType.GPT_4O_MINI,
-        api_key="sk-16MLxtQC8IBrLJEliKGLLGUDiK6nTwhbfoaggE7fJIMFLVDy", 
-        url="http://35.220.164.252:3888/v1", 
+        api_key=os.getenv("OPENAI_API_KEY"), 
+        url=os.getenv("OPENAI_BASE_URL"), 
     )
-
     agent_graph = AgentGraph()
+
+
+    # 生成卖家 agents
+    print("Generating seller agents...")
+    seller_agent_graph = await generate_agent_from_LLM(
+        agents_num=NUM_SELLERS,
+        sys_prompt=SELLER_GENERATION_SYS_PROMPT,
+        user_prompt=SELLER_GENERATION_USER_PROMPT,
+        available_actions=ActionType.get_warrant_market_actions(),
+        role="seller",
+    )
     
-    seller_personas = [
-        "You are an honest seller. Your primary goal is to build a long-term, trustworthy business. You believe that selling High-Quality (HQ) products is the best way to achieve a high reputation and sustainable profit, even if it means lower margins in the short term. You will always produce HQ products and advertise them truthfully.",
-        "You are a deceptive seller. Your main goal is to maximize immediate profit, even at the risk of your reputation. You see advertising LQ products as HQ as a highly profitable, albeit risky, strategy. You will try to deceive buyers whenever you think you can get away with it, especially if your reputation is not yet negative.",
-        "You are a strategic seller. You balance the pursuit of profit with the need to maintain a decent reputation. You might honestly sell HQ products to build up your reputation, but you are not against selling a deceptive LQ product if you feel the market conditions are right (e.g., your reputation is high enough to absorb a potential hit)."
-    ]
+    # 生成买家 agents
+    print("Generating buyer agents...")
+    buyer_agent_graph = await generate_agent_from_LLM(
+        agents_num=NUM_BUYERS,
+        sys_prompt=BUYER_GENERATION_SYS_PROMPT,
+        user_prompt=BUYER_GENERATION_USER_PROMPT,
+        available_actions=ActionType.get_warrant_market_actions(),
+        role="buyer"
+    )
     
-    buyer_personas = [
-        "You are a pragmatic buyer focused on maximizing utility. You are willing to purchase from sellers with low or neutral reputation, especially if the product has a warrant, as you understand this is how a new market starts.",
-        "You are an analytical buyer. Your primary goal is to increase your utility score. You analyze the available products and are willing to make a purchase if the potential utility gain is positive, even from new sellers.",
-        "You are a strategic buyer. You understand that rating sellers helps build a healthy market. You are willing to be the first to buy a product to rate the seller and gain information for future rounds."
-    ]
+    # 合并 agent graphs
     
-    for i in range(TOTAL_AGENTS):
-        if i < NUM_SELLERS:
-            role = 'seller'
-            persona = seller_personas[i % len(seller_personas)]
-            available_actions = ActionType.get_seller_actions()
-        else:
-            role = 'buyer'
-            persona = buyer_personas[(i - NUM_SELLERS) % len(buyer_personas)]
-            available_actions = ActionType.get_buyer_actions()
-        
-        user_info = UserInfo(
-            user_name=f"agent_{i}",
-            name=f"Agent {i} ({role.capitalize()})",
-            description=f"A {role} in the market.",
-            profile={
-                "other_info": {
-                    "user_profile": persona,
-                    "role": role,
-                }
-            }
-        )
-        
-        agent = SocialAgent(
-            agent_id=i,
-            user_info=user_info,
-            model=model,
-            agent_graph=agent_graph,
-            available_actions=available_actions, 
-        )
-        agent.env.is_market_sim =True
+    # 添加卖家 agents
+    for agent_id, agent in seller_agent_graph.get_agents():
+        agent.user_info.profile["other_info"]["role"] = "seller"
+        agent.env.is_market_sim = True
+        agent_graph.add_agent(agent)
+    
+    # 添加买家 agents (重新分配 agent_id)
+    for agent_id, agent in buyer_agent_graph.get_agents():
+        agent.user_info.profile["other_info"]["role"] = "buyer"
+        agent.env.is_market_sim = True
         agent_graph.add_agent(agent)
 
     env = make(
@@ -239,12 +234,7 @@ async def main():
                 
                 # 格式化历史记录为字符串
                 history_log = sellers_history.get(agent_id, [])
-                if not history_log:
-                    history_string = "This is the first round. You have no past performance data."
-                else:
-                    history_string = "Here is a summary of your performance in previous rounds:\n"
-                    for entry in history_log:
-                        history_string += f"- Round {entry['round']}: Listed a {entry['quality']} product. Sold: {entry['sold']}. Round Profit: {entry['profit']}. New Reputation: {entry['reputation']}\n"
+                history_string = format_seller_history(history_log)
                 
                 # 更新系统Prompt
                 prompt_template = agent.user_info.to_seller_master_prompt()
