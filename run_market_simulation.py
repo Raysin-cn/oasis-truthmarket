@@ -9,6 +9,7 @@ from oasis.environment.env_action import LLMAction
 from oasis.social_platform.typing import ActionType
 from oasis.social_agent.agents_generator import generate_agent_from_LLM
 from prompt import format_seller_history, SELLER_GENERATION_SYS_PROMPT, SELLER_GENERATION_USER_PROMPT, BUYER_GENERATION_SYS_PROMPT, BUYER_GENERATION_USER_PROMPT
+from utils import print_round_statistics, clear_market, print_simulation_summary
 
 from dotenv import load_dotenv
 load_dotenv(override=True)
@@ -28,10 +29,10 @@ def get_agent_state(agent_id: int, role: str, round_num: int = -1) -> dict:
     if not os.path.exists(DATABASE_PATH):
         # 如果是卖家，返回初始预算和声誉
         if role == 'seller':
-            return {'current_budget': 100.0, 'reputation_score': 1}
+            return {'current_budget': 100.0, 'reputation_score': 1, 'total_profit': 0}
         # 如果是买家，返回初始效用
         else:
-            return {'cumulative_utility': 0}
+            return {'cumulative_utility': 0, 'total_utility': 0}
 
     conn = sqlite3.connect(DATABASE_PATH)
     cursor = conn.cursor()
@@ -39,30 +40,53 @@ def get_agent_state(agent_id: int, role: str, round_num: int = -1) -> dict:
     state = {}
     try:
         if role == 'seller':
-            # 如果提供了有效的 round_num，则查询该回合的 trace 记录来回溯状态
+            # 获取卖家基本信息
             cursor.execute(
-                "SELECT budget, reputation_score FROM user WHERE user_id = ?",
+                "SELECT budget, reputation_score, profit_utility_score FROM user WHERE user_id = ?",
                 (agent_id,)
             )
             result = cursor.fetchone()
             state['current_budget'] = result[0] if result else 100.0
             state['reputation_score'] = result[1] if result else 1
+            state['total_profit'] = result[2] if result and result[2] is not None else 0
+            
+            # 获取该回合的销售情况
+            if round_num > 0:
+                cursor.execute(
+                    "SELECT COUNT(*), SUM(seller_profit) FROM transactions WHERE seller_id = ? AND round_number = ?",
+                    (agent_id, round_num)
+                )
+                sales_result = cursor.fetchone()
+                state['round_sales'] = sales_result[0] if sales_result else 0
+                state['round_profit'] = sales_result[1] if sales_result and sales_result[1] is not None else 0
         
         elif role == 'buyer':
+            # 获取买家基本信息
             cursor.execute(
                 "SELECT profit_utility_score FROM user WHERE user_id = ?",
                 (agent_id,)
             )
             result = cursor.fetchone()
             state['cumulative_utility'] = result[0] if result and result[0] is not None else 0
+            state['total_utility'] = result[0] if result and result[0] is not None else 0
+            
+            # 获取该回合的购买情况
+            if round_num > 0:
+                cursor.execute(
+                    "SELECT COUNT(*), SUM(buyer_utility) FROM transactions WHERE buyer_id = ? AND round_number = ?",
+                    (agent_id, round_num)
+                )
+                purchase_result = cursor.fetchone()
+                state['round_purchases'] = purchase_result[0] if purchase_result else 0
+                state['round_utility'] = purchase_result[1] if purchase_result and purchase_result[1] is not None else 0
     
     except sqlite3.Error as e:
         print(f"数据库查询错误 (get_agent_state): {e}")
         # 出错时返回默认值
         if role == 'seller':
-            state = {'current_budget': 100.0, 'reputation_score': 1}
+            state = {'current_budget': 100.0, 'reputation_score': 1, 'total_profit': 0}
         else:
-            state = {'cumulative_utility': 0}
+            state = {'cumulative_utility': 0, 'total_utility': 0}
     finally:
         conn.close()
         
@@ -117,23 +141,6 @@ def get_seller_round_summary(seller_id: int, round_num: int) -> dict:
         conn.close()
     return summary
 
-def clear_market():
-    """将所有在售商品的状态更新为'expired'，实现市场清空。"""
-    if not os.path.exists(DATABASE_PATH):
-        return
-    conn = sqlite3.connect(DATABASE_PATH)
-    cursor = conn.cursor()
-    try:
-        # 将所有状态为 'on_sale' 的商品更新为 'expired'
-        cursor.execute("UPDATE post SET status = 'expired' WHERE status = 'on_sale'")
-        conn.commit()
-        # 获取被影响的行数，用于调试
-        changes = conn.total_changes
-        print(f"Market cleared: {changes} unsold products have been removed from sale.")
-    except sqlite3.Error as e:
-        print(f"数据库错误 (clear_market): {e}")
-    finally:
-        conn.close()
 
 def initialize_market_roles(agent_graph: AgentGraph):
     """在数据库中为所有智能体设置角色和初始状态。"""
@@ -301,27 +308,32 @@ async def main():
 
         clear_market()
         
+        # 打印回合统计信息
+        print_round_statistics(round_num)
+        
         #  更新历史记录 
         for seller_id in range(NUM_SELLERS):
             round_summary = get_seller_round_summary(seller_id, round_num)
-            new_state = get_agent_state(seller_id, 'seller') 
+            new_state = get_agent_state(seller_id, 'seller', round_num) 
 
-            profit = 0
-            if round_summary["sold"] == "Yes":
-                profit = round_summary["price"] 
+            # 获取该回合的实际收益
+            round_profit = new_state.get('round_profit', 0)
+            total_profit = new_state.get('total_profit', 0)
 
             sellers_history[seller_id].append({
                 "round": round_num,
                 "quality": round_summary["quality"], 
                 "sold": round_summary["sold"], 
-                "profit": profit,
-                "reputation": new_state['reputation_score']
+                "profit": round_profit,
+                "reputation": new_state['reputation_score'],
+                "total_profit": total_profit
             })
 
         print(f"\n{'='*20} End of Round {round_num} {'='*20}")
 
     
     await env.close()
+    print_simulation_summary()
     print("\nSimulation finished")
 
 if __name__ == "__main__":

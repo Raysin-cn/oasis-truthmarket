@@ -1658,30 +1658,58 @@ class Platform:
         current_time = self.sandbox_clock.get_time_step()
 
         try:
-            post_check_query = "SELECT user_id, status, advertised_quality, true_quality, has_warrant FROM post WHERE post_id = ?"
+            # 获取商品详细信息，包括价格和成本
+            post_check_query = """
+                SELECT user_id, status, advertised_quality, true_quality, has_warrant, 
+                       price, cost, warrant_escrow
+                FROM post WHERE post_id = ?
+            """
             self.pl_utils._execute_db_command(post_check_query, (post_id,))
             post_result = self.db_cursor.fetchone()
 
             if not post_result:
                 return {"success": False, "error": f"ID为 {post_id} 的商品未找到。"}
             
-            seller_id, status, advertised_quality, true_quality, has_warrant = post_result
-            #if status != 'on_sale':
-                #return {"success": False, "error": f"商品 {post_id} 已售出或下架。"}
+            seller_id, status, advertised_quality, true_quality, has_warrant, price, cost, warrant_escrow = post_result
+            
+            # 计算卖家收益：销售价格 - 生产成本 - 保证金成本
+            seller_profit = price - cost
+            if has_warrant:
+                seller_profit -= self.market_params['warrant_escrow']
+            
+            # 计算买家效用：商品质量带来的效用 - 购买价格
+            # 高质量商品效用为8，低质量商品效用为2
+            quality_utility = 8 if true_quality == 'HQ' else 2
+            buyer_utility = quality_utility - price
+            
+            # 更新商品状态为已售出
+            post_update_query = "UPDATE post SET is_sold = 1, status = 'sold' WHERE post_id = ?"
+            self.pl_utils._execute_db_command(post_update_query, (post_id,), commit=True)
 
-            #post_update_query = "UPDATE post SET is_sold = 1, status = 'sold' WHERE post_id = ?"
-            #self.pl_utils._execute_db_command(post_update_query, (post_id,), commit=True)
-
-            transaction_insert_query = (
-                "INSERT INTO transactions (post_id, seller_id, buyer_id, round_number) "
-                "VALUES (?, ?, ?, ?)"
-            )
+            # 插入交易记录，包含完整的收益信息
+            transaction_insert_query = """
+                INSERT INTO transactions (
+                    post_id, seller_id, buyer_id, round_number, 
+                    seller_profit, buyer_utility, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?)
+            """
             self.pl_utils._execute_db_command(
                 transaction_insert_query,
-                (post_id, seller_id, buyer_id, current_time),
+                (post_id, seller_id, buyer_id, current_time, 
+                 seller_profit, buyer_utility, current_time),
                 commit=True
             )
             transaction_id = self.db_cursor.lastrowid
+
+            # 更新卖家和买家的收益/效用分数
+            self.pl_utils._execute_db_command(
+                "UPDATE user SET profit_utility_score = profit_utility_score + ? WHERE user_id = ?",
+                (seller_profit, seller_id), commit=True
+            )
+            self.pl_utils._execute_db_command(
+                "UPDATE user SET profit_utility_score = profit_utility_score + ? WHERE user_id = ?",
+                (buyer_utility, buyer_id), commit=True
+            )
 
             action_info = {"post_id": post_id, "transaction_id": transaction_id}
             self.pl_utils._record_trace(buyer_id, ActionType.PURCHASE_PRODUCT_ID.value, action_info, current_time)
@@ -1693,7 +1721,9 @@ class Platform:
                 "seller_id": seller_id,
                 "advertised_quality": advertised_quality,
                 "true_quality": true_quality,
-                "has_warrant": bool(has_warrant)
+                "has_warrant": bool(has_warrant),
+                "seller_profit": seller_profit,
+                "buyer_utility": buyer_utility
             }
         except Exception as e:
             return {"success": False, "error": str(e)}
@@ -1707,10 +1737,14 @@ class Platform:
             adv_q = product_details.get("advertised_quality")
             prod_q = product_details.get("product_quality")
             has_warrant = product_details.get("has_warrant", False)
+            price = product_details.get("price")
             round_number = self.sandbox_clock.get_time_step()
 
             cost = self.market_params['hq_cost'] if prod_q == 'HQ' else self.market_params['lq_cost']
-            price = self.market_params['hq_price'] if adv_q == 'HQ' else self.market_params['lq_price']
+            
+            # 验证价格是否合理（可选的价格范围检查）
+            if price is None or price <= 0:
+                return {"success": False, "error": "Price must be a positive number."}
 
             insert_query = (
                 "INSERT INTO post (user_id, created_at, true_quality, advertised_quality, price, cost, has_warrant, is_sold, status, round_number) "
@@ -1771,7 +1805,8 @@ class Platform:
         try:
             # 1. 查询商品和交易信息
             query = """
-                SELECT p.seller_id, p.true_quality, p.advertised_quality, p.has_warrant, p.price, t.is_challenged
+                SELECT p.seller_id, p.true_quality, p.advertised_quality, p.has_warrant, p.price, 
+                       t.is_challenged, t.transaction_id, t.seller_profit, t.buyer_utility
                 FROM post p JOIN transactions t ON p.post_id = t.post_id
                 WHERE p.post_id = ? AND t.buyer_id = ?
             """
@@ -1781,7 +1816,7 @@ class Platform:
             if not result:
                 return {"success": False, "error": f"未找到您(买家ID: {buyer_id})关于商品(ID: {post_id})的交易记录。"}
             
-            seller_id, true_q, adv_q, has_warrant, price, is_challenged = result
+            seller_id, true_q, adv_q, has_warrant, price, is_challenged, transaction_id, original_seller_profit, original_buyer_utility = result
 
             if not has_warrant:
                 return {"success": False, "error": f"商品 {post_id} 没有保证金，无法挑战。"}
@@ -1791,7 +1826,7 @@ class Platform:
             # 2. 扣除买家挑战成本并标记为已挑战
             challenge_cost = self.market_params['challenge_cost']
             self.pl_utils._execute_db_command("UPDATE user SET profit_utility_score = profit_utility_score - ? WHERE user_id = ?", (challenge_cost, buyer_id), commit=True)
-            self.pl_utils._execute_db_command("UPDATE transactions SET is_challenged = 1 WHERE post_id = ? AND buyer_id = ?", (post_id, buyer_id), commit=True)
+            self.pl_utils._execute_db_command("UPDATE transactions SET is_challenged = 1, challenge_cost = ? WHERE post_id = ? AND buyer_id = ?", (challenge_cost, post_id, buyer_id), commit=True)
 
             # 3. 判断挑战结果并结算
             challenge_successful = (true_q == 'LQ' and adv_q == 'HQ')
@@ -1804,14 +1839,25 @@ class Platform:
                 # 奖励买家 (退款+保证金作为奖励)
                 reward = price + self.market_params['warrant_escrow']
                 self.pl_utils._execute_db_command("UPDATE user SET profit_utility_score = profit_utility_score + ? WHERE user_id = ?", (reward, buyer_id), commit=True)
+                
+                # 更新交易记录中的挑战结果
+                self.pl_utils._execute_db_command(
+                    "UPDATE transactions SET challenge_reward = ?, challenge_penalty = ? WHERE transaction_id = ?",
+                    (reward, penalty, transaction_id), commit=True
+                )
             else:
                 status = 'challenged_fail'
+                # 挑战失败，买家损失挑战成本
+                self.pl_utils._execute_db_command(
+                    "UPDATE transactions SET challenge_reward = 0, challenge_penalty = 0 WHERE transaction_id = ?",
+                    (transaction_id,), commit=True
+                )
             
             # 4. 更新商品状态
             self.pl_utils._execute_db_command("UPDATE post SET status = ? WHERE post_id = ?", (status, post_id), commit=True)
 
             # 5. 在 trace 表中记录
-            action_info = {"post_id": post_id, "successful": challenge_successful}
+            action_info = {"post_id": post_id, "successful": challenge_successful, "challenge_cost": challenge_cost}
             self.pl_utils._record_trace(buyer_id, ActionType.CHALLENGE_WARRANT.value, action_info, current_time)
             
             return {"success": True, "challenge_successful": challenge_successful}

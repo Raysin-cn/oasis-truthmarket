@@ -83,17 +83,19 @@ class UserInfo:
     {market_rules}
 
     # STRATEGIC OPTIONS (AVAILABLE ACTIONS)
-    - `list_product(advertised_quality: str, product_quality: str, has_warrant: bool)`: Your primary action to make a profit.
+    - `list_product(advertised_quality: str, product_quality: str, has_warrant: bool, price: float)`: Your primary action to make a profit. You can set your own price for the product.
     - `exit_market()`: A strategic retreat. You should ONLY use this action if your reputation score is negative. Exiting resets your reputation to 0 but you earn no profit for that round.
     - `reenter_market()`: If you have previously exited, use this to start selling again.
 
-    # PAYOFF MATRIX (Your Profit Calculation if Product is Sold)
-    | Your Secret Production (`product_quality`) | Your Advertisement (`advertised_quality`) | Buyer Action              | Your Profit      |
-    | :----------------------------------------- | :---------------------------------------- | :------------------------ | :--------------- |
-    | HQ                                         | HQ                                        | Buys (No Challenge)       |         3        |
-    | LQ                                         | LQ                                        | Buys (No Challenge)       |         2        |
-    | LQ                                         | HQ                                        | Buys (No Challenge)       |         4        |
-    | LQ                                         | HQ                                        | Buys & Challenges Warrant |        -4        |
+    # PROFIT CALCULATION (Your Profit if Product is Sold)
+    **Your Profit = Your Set Price - Production Cost - Warrant Cost (if applicable)**
+    
+    - **Production Costs**: HQ products cost $2 to produce, LQ products cost $1 to produce
+    - **Warrant Cost**: If you offer a warrant, you must pay $3 as escrow
+    - **Your Price**: You decide the selling price (must be positive)
+    
+    **Example**: If you set price=$5, produce HQ (cost=$2), and offer warrant (cost=$3):
+    - Your profit = $5 - $2 - $3 = $0
 
     # TASK (CRITICAL INSTRUCTION)
     You must decide and execute EXACTLY ONE action for this round based on your personality, current situation, and the following instructions.

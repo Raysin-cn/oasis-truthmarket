@@ -762,7 +762,7 @@ class SocialAction:
         return await self.perform_action(self.agent_id,
                                          ActionType.LISTEN_FROM_GROUP.value)
 
-    async def list_product(self, advertised_quality: str, product_quality: str, has_warrant: bool):
+    async def list_product(self, advertised_quality: str, product_quality: str, has_warrant: bool, price: float):
         """
         Lists a product for sale in the market for the current round.
 
@@ -773,11 +773,13 @@ class SocialAction:
                                     produced. Must be 'HQ' or 'LQ'.
             has_warrant (bool): Whether to offer a truth warrant for the 
                                     product.
+            price (float): The price at which to sell the product.
         """
         product_details = {
             "advertised_quality": advertised_quality,
             "product_quality": product_quality,
             "has_warrant": has_warrant,
+            "price": price,
         }
         return await self.perform_action(product_details, 
                                         ActionType.LIST_PRODUCT.value)
