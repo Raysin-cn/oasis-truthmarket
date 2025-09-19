@@ -8,7 +8,7 @@ from oasis import SocialAgent, AgentGraph, UserInfo, make
 from oasis.environment.env_action import LLMAction
 from oasis.social_platform.typing import ActionType
 from oasis.social_agent.agents_generator import generate_agent_from_LLM
-from prompt import BUYER_PERSONAS, SELLER_PERSONA, format_seller_history, SELLER_GENERATION_SYS_PROMPT, SELLER_GENERATION_USER_PROMPT, BUYER_GENERATION_SYS_PROMPT, BUYER_GENERATION_USER_PROMPT
+from prompt import format_seller_history, SELLER_GENERATION_SYS_PROMPT, SELLER_GENERATION_USER_PROMPT, BUYER_GENERATION_SYS_PROMPT, BUYER_GENERATION_USER_PROMPT
 
 from dotenv import load_dotenv
 load_dotenv(override=True)
@@ -17,8 +17,8 @@ load_dotenv(override=True)
 # 实验配置
 
 TOTAL_AGENTS = 6
-NUM_SELLERS = 5
-NUM_BUYERS = 5
+NUM_SELLERS = 10
+NUM_BUYERS = 10
 SIMULATION_ROUNDS = 7
 DATABASE_PATH = 'market_sim.db'
 
