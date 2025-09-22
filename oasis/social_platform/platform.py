@@ -1661,7 +1661,7 @@ class Platform:
             # 获取商品详细信息，包括价格和成本
             post_check_query = """
                 SELECT user_id, status, advertised_quality, true_quality, has_warrant, 
-                       price, cost, warrant_escrow
+                       price, cost
                 FROM post WHERE post_id = ?
             """
             self.pl_utils._execute_db_command(post_check_query, (post_id,))
@@ -1670,7 +1670,7 @@ class Platform:
             if not post_result:
                 return {"success": False, "error": f"ID为 {post_id} 的商品未找到。"}
             
-            seller_id, status, advertised_quality, true_quality, has_warrant, price, cost, warrant_escrow = post_result
+            seller_id, status, advertised_quality, true_quality, has_warrant, price, cost = post_result
             
             # 计算卖家收益：销售价格 - 生产成本 - 保证金成本
             seller_profit = price - cost
