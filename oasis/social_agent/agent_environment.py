@@ -41,14 +41,23 @@ def get_product_listings_for_env() -> str:
     listings = "No products are currently on sale."
     try:
         cursor.execute(
-            "SELECT post_id, user_id, advertised_quality, price, has_warrant FROM post WHERE status = 'on_sale'"
+            """
+            SELECT p.post_id, p.user_id, p.advertised_quality, p.price, p.has_warrant,
+                   COALESCE(u.reputation_score, 0) AS reputation_score
+            FROM post p
+            LEFT JOIN user u ON u.user_id = p.user_id
+            WHERE p.status = 'on_sale'
+            """
         )
         products = cursor.fetchall()
         if products:
             listings = "Here is the list of products currently on sale:\n"
             for p in products:
                 warrant_info = " (Warranted)" if p[4] else ""
-                listings += f"- Product ID: {p[0]}, Seller ID: {p[1]}, Advertised Quality: {p[2]}, Price: ${p[3]:.2f}{warrant_info}\n"
+                listings += (
+                    f"- Product ID: {p[0]}, Seller ID: {p[1]}, Seller Reputation: {p[5]}, "
+                    f"Advertised Quality: {p[2]}, Price: ${p[3]:.2f}{warrant_info}\n"
+                )
     except sqlite3.Error as e:
         print(f"数据库查询错误 (get_product_listings_for_env): {e}")
     finally:
