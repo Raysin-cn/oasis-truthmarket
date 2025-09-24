@@ -1678,8 +1678,8 @@ class Platform:
                 seller_profit -= self.market_params['warrant_escrow']
             
             # 计算买家效用：商品质量带来的效用 - 购买价格
-            # 高质量商品效用为8，低质量商品效用为2
-            quality_utility = 8 if true_quality == 'HQ' else 2
+            # 高质量商品效用为5，低质量商品效用为2
+            quality_utility = 5 if true_quality == 'HQ' else 2
             buyer_utility = quality_utility - price
             
             # 更新商品状态为已售出

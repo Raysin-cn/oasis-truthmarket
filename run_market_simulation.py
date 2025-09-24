@@ -27,7 +27,7 @@ DATABASE_PATH = 'market_sim.db'
 os.environ.setdefault('MARKET_DB_PATH', DATABASE_PATH)
 
 # 超参数（根据 proposals ）
-REPUTATION_LAG = 2  # ratings from round t available to public at t+2
+REPUTATION_LAG = 1  # ratings from round t available to public at t+REPUTATION_LAG
 REENTRY_ALLOWED_ROUND = 5
 INITIAL_WINDOW_ROUNDS = [1, 2]  # rounds to hide full history
 EXIT_ROUND = 7  # after round 7 sellers may exit
@@ -38,7 +38,7 @@ def get_agent_state(agent_id: int, role: str, round_num: int = -1) -> dict:
     if not os.path.exists(DATABASE_PATH):
         # 如果是卖家，返回初始预算和声誉
         if role == 'seller':
-            return {'current_budget': 100.0, 'reputation_score': 1, 'total_profit': 0}
+            return {'current_budget': 100.0, 'reputation_score': 0, 'total_profit': 0}
         # 如果是买家，返回初始效用
         else:
             return {'cumulative_utility': 0, 'total_utility': 0}
@@ -56,7 +56,7 @@ def get_agent_state(agent_id: int, role: str, round_num: int = -1) -> dict:
             )
             result = cursor.fetchone()
             state['current_budget'] = result[0] if result else 100.0
-            state['reputation_score'] = result[1] if result else 1
+            state['reputation_score'] = result[1] if result else 0
             state['total_profit'] = result[2] if result and result[2] is not None else 0
             
             # 获取该回合的销售情况
@@ -93,7 +93,7 @@ def get_agent_state(agent_id: int, role: str, round_num: int = -1) -> dict:
         print(f"数据库查询错误 (get_agent_state): {e}")
         # 出错时返回默认值
         if role == 'seller':
-            state = {'current_budget': 100.0, 'reputation_score': 1, 'total_profit': 0}
+            state = {'current_budget': 100.0, 'reputation_score': 0, 'total_profit': 0}
         else:
             state = {'cumulative_utility': 0, 'total_utility': 0}
     finally:
@@ -126,9 +126,8 @@ def get_product_listings() -> str:
             listings = "Here is the list of products currently on sale:\n"
             for p in products:
                 warrant_info = " (Warranted)" if p[4] else ""
-                seller_rep = p[5]
                 listings += (
-                    f"- Product ID: {p[0]}, Seller ID: {p[1]}, Seller Reputation: {seller_rep}, "
+                    f"- Product ID: {p[0]}, Seller ID: {p[1]}, Seller Reputation: {p[5]}, "
                     f"Advertised Quality: {p[2]}, Price: ${p[3]:.2f}{warrant_info}\n"
                 )
     except sqlite3.Error as e:
@@ -175,7 +174,7 @@ def initialize_market_roles(agent_graph: AgentGraph):
                 # 为卖家设置初始预算和声誉
                 cursor.execute(
                     "UPDATE user SET role = ?, budget = ?, reputation_score = ?, profit_utility_score = ? WHERE agent_id = ?",
-                    ('seller', 100.0, 1, 0.0, agent_id) 
+                    ('seller', 100.0, 0, 0.0, agent_id) 
                 )
             elif role == 'buyer':
                 # 为买家设置角色和初始分数
@@ -290,7 +289,9 @@ async def main():
                     current_round=round_num,
                     current_budget=state['current_budget'],
                     reputation_score=state['reputation_score'],
-                    history_summary=visible_history_string 
+                    history_summary=visible_history_string,
+                    reputation_lag=REPUTATION_LAG,
+                    reentry_round=REENTRY_ALLOWED_ROUND
                 )
                 # 条件注入额外工具：在允许时机暴露退出/重返市场动作
                 extra_tools = []
@@ -354,7 +355,8 @@ async def main():
                     post_id=purchase_info.get("post_id"),
                     advertised_quality=purchase_info.get("advertised_quality"),
                     true_quality=purchase_info.get("true_quality"),
-                    has_warrant=purchase_info.get("has_warrant")
+                    has_warrant=purchase_info.get("has_warrant"),
+                    buyer_utility=purchase_info.get("buyer_utility")
                 )
                 # 限定评分阶段工具：仅允许挑战保证与评分
                 phase2_tools = []

@@ -54,11 +54,11 @@ class UserInfo:
         """Generates the master prompt for a Seller Agent in the combined market."""
         
         market_rules = (
-            "1. **Reputation System**: Buyers can rate each transaction with a thumbs up (+1) or a thumbs down (-1). "
-            "Your Reputation Score is the sum of these ratings. A higher reputation may attract more buyers.\n"
-            "2. **Truth Warrant System**: You can offer a 'Truth Warrant' for your products. If you falsely advertise a warranted product "
-            "(e.g., advertise HQ, produce LQ) and the buyer challenges it, you will be heavily penalized, "
-            "losing a fixed amount of 4 points from your profit, overriding any sales income."
+            "1. Reputation Lag: Your public `reputation_score` updates with a lag of {reputation_lag} round(s). Do not expect same-round ratings to take effect immediately; plan for long-term profit.\n"
+            "2. Exit (Round Settlement): `exit_market()` exits the market for this round and settles for the round (no further sales this round).\n"
+            "3. Re-entry: From round {reentry_round}, you can use `reenter_market()` to return. If your reputation is negative, re-entry resets it to 0 so you can restart.\n"
+            "4. Unsold Clearance: At the end of each round, any unsold listings are cleared and will not carry over automatically.\n"
+            "5. Truth Warrant: If you offer a warrant, ensure advertised and true quality match; successful challenges incur severe penalties and hurt long-term profit."
         )
         
         persona = self.profile.get("other_info", {}).get("user_profile", "You are a seller.")
@@ -84,8 +84,8 @@ class UserInfo:
 
     # STRATEGIC OPTIONS (AVAILABLE ACTIONS)
     - `list_product(advertised_quality: str, product_quality: str, has_warrant: bool, price: float)`: Your primary action to make a profit. You can set your own price for the product.
-    - `exit_market()`: A strategic retreat. You should ONLY use this action if your reputation score is negative. Exiting resets your reputation to 0 but you earn no profit for that round.
-    - `reenter_market()`: If you have previously exited, use this to start selling again.
+    - `exit_market()`: Exit the market and settle for this round (no further sales this round).
+    - `reenter_market()`: If you previously exited and your reputation is negative, re-entry resets it to 0 (no immediate profit).
 
     # PROFIT CALCULATION (Your Profit if Product is Sold)
     **Your Profit = Your Set Price - Production Cost - Warrant Cost (if applicable)**
@@ -108,10 +108,13 @@ class UserInfo:
     1.  **Assess your situation**: Analyze your current reputation and past performance from the summary.
     2.  **Formulate a Strategy**: Based on your PERSONALITY, decide your plan for this round.
     3.  **Execute the Action**: You MUST call one of the available functions.
-        - **Default Action Rule**: If your analysis does not lead you to a clear decision to `exit_market` or `reenter_market`, your default action **MUST BE** to `list_product`. You must always take an action.
+        - **Default Action Rule**: If you have no clear reason to exit or re-enter, your default action should be `list_product` to actively participate in the market.
+        - **Warrant Honesty Rule**: If you offer a warrant, keep advertised and true quality aligned; successful challenges cause severe penalties and hurt long-term profit.
+        - **Reputation Awareness**: Public reputation updates with lag (not real-time); plan strategies toward long-term cumulative profit.
 
     Provide your step-by-step reasoning first, then execute your chosen function call.
     """
+        # Return template; caller will fill placeholders (current_round, reputation_lag, reentry_round, etc.)
         return prompt.strip()
 
     def to_buyer_master_prompt(self) -> str:
@@ -177,6 +180,7 @@ class UserInfo:
     - Advertised Quality: {{advertised_quality}}
     - True Quality You Received: {{true_quality}}
     - Was Warranted: {{has_warrant}}
+    - Your Utility from This Purchase: {{buyer_utility}}
 
     # TASK: YOUR POST-PURCHASE WORKFLOW
     You MUST now consider two actions: challenging and rating.
