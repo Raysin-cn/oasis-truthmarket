@@ -63,16 +63,19 @@ def _get_run_meta() -> Tuple[int, Optional[int]]:
     return run_id, seed
 
 
-def compute_and_update_reputation(conn: sqlite3.Connection, round_number: int) -> None:
+def compute_and_update_reputation(conn: sqlite3.Connection, round_number: int, ratings_up_to_round: Optional[int] = None) -> None:
     """
-    Compute each seller's public reputation using cumulative average of ratings
-    up to current round and insert a snapshot into reputation_history.
-    Also update `user.reputation_score` for convenience.
+    计算每个卖家的公共声誉：按评分的累计平均。
+    - round_number: 当前快照所属的回合（用于写入 reputation_history.round）
+    - ratings_up_to_round: 评分聚合所考虑的最大回合（用于实现滞后显示）。
+      若为 None，则等同于使用 round_number。
     """
     ensure_tables(conn)
     cursor = conn.cursor()
 
-    # Gather all ratings up to current round per seller
+    effective_max_round = round_number if ratings_up_to_round is None else int(ratings_up_to_round)
+
+    # 以 effective_max_round 作为评分聚合窗口上限
     cursor.execute(
         """
         SELECT t.seller_id, COUNT(t.rating) as cnt, COALESCE(SUM(t.rating), 0)
@@ -80,7 +83,7 @@ def compute_and_update_reputation(conn: sqlite3.Connection, round_number: int) -
         WHERE t.rating IS NOT NULL AND t.round_number <= ?
         GROUP BY t.seller_id
         """,
-        (round_number,),
+        (effective_max_round,),
     )
     aggregated = {row[0]: (int(row[1]), int(row[2])) for row in cursor.fetchall()}
 

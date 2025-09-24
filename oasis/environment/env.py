@@ -121,11 +121,11 @@ class OasisEnv:
         self.agent_graph = await generate_custom_agents(
             channel=self.channel, agent_graph=self.agent_graph)
 
-    async def _perform_llm_action(self, agent):
+    async def _perform_llm_action(self, agent, extra_action = None):
         r"""Send the request to the llm model and execute the action.
         """
         async with self.llm_semaphore:
-            return await agent.perform_action_by_llm()
+            return await agent.perform_action_by_llm(extra_action)
 
     async def _perform_interview_action(self, agent, interview_prompt: str):
         r"""Send the request to the llm model and execute the interview.
@@ -153,7 +153,7 @@ class OasisEnv:
                         else:
                             tasks.append(agent.perform_action_by_data(single_action.action_type, **single_action.action_args))
                     elif isinstance(single_action, LLMAction):
-                        tasks.append(self._perform_llm_action(agent))
+                        tasks.append(self._perform_llm_action(agent, single_action.extra_action))
             else:
                 if isinstance(action, ManualAction):
                     if action.action_type == ActionType.INTERVIEW:
@@ -162,7 +162,7 @@ class OasisEnv:
                     else:
                         tasks.append(agent.perform_action_by_data(action.action_type, **action.action_args))
                 elif isinstance(action, LLMAction):
-                    tasks.append(self._perform_llm_action(agent))
+                    tasks.append(self._perform_llm_action(agent, action.extra_action))
 
         # 执行所有任务并提取、返回结果列表
         responses = await asyncio.gather(*tasks)

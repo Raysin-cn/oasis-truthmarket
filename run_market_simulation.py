@@ -26,6 +26,12 @@ SIMULATION_ROUNDS = 7
 DATABASE_PATH = 'market_sim.db'
 os.environ.setdefault('MARKET_DB_PATH', DATABASE_PATH)
 
+# 超参数（根据 proposals ）
+REPUTATION_LAG = 2  # ratings from round t available to public at t+2
+REENTRY_ALLOWED_ROUND = 5
+INITIAL_WINDOW_ROUNDS = [1, 2]  # rounds to hide full history
+EXIT_ROUND = 7  # after round 7 sellers may exit
+
 
 def get_agent_state(agent_id: int, role: str, round_num: int = -1) -> dict:
     """获取智能体在特定回合或当前的状态。"""
@@ -234,6 +240,10 @@ async def main():
     
     for round_num in range(1, SIMULATION_ROUNDS + 1):
         print(f"\n{'='*20} Starting Round {round_num}/{SIMULATION_ROUNDS} {'='*20}")
+
+        # 卖家退场机制：超过 EXIT_ROUND 的回合后允许退出（此处仅标注，具体执行可在平台侧实现）
+        if round_num > EXIT_ROUND:
+            print("Sellers may exit market. (soft flag)")
         
         # 卖家行动
         print(f"\n--- [Round {round_num}] Seller Action Phase ---")
@@ -241,10 +251,13 @@ async def main():
         for agent_id, agent in agent_graph.get_agents():
             if agent.user_info.profile.get("other_info", {}).get("role") == 'seller':
                 state = get_agent_state(agent_id, 'seller')
-                
-                # 格式化历史记录为字符串
+
+                # 隐藏早期窗口内的完整历史（仅展示聚合/摘要或空）
                 history_log = sellers_history.get(agent_id, [])
-                history_string = format_seller_history(history_log)
+                if round_num in INITIAL_WINDOW_ROUNDS:
+                    visible_history_string = "History hidden in initial window."
+                else:
+                    visible_history_string = format_seller_history(history_log)
                 
                 # 更新系统Prompt
                 prompt_template = agent.user_info.to_seller_master_prompt()
@@ -252,7 +265,7 @@ async def main():
                     current_round=round_num,
                     current_budget=state['current_budget'],
                     reputation_score=state['reputation_score'],
-                    history_summary=history_string 
+                    history_summary=visible_history_string 
                 )
                 seller_actions[agent] = LLMAction()
         
@@ -281,6 +294,10 @@ async def main():
         if buyer_actions:
             purchase_results = await env.step(buyer_actions)
         print("All purchase actions are attempted.")
+
+        # 卖家重返机制：REENTRY_ALLOWED_ROUND 之后，允许被标记操纵/低声誉者重新进入（此处留接口，实际控制可依赖 platform 层）
+        if round_num >= REENTRY_ALLOWED_ROUND:
+            print("Re-entry policy active for low-reputation/manipulators. (soft flag)")
 
         # 挑战与评价 
         print(f"\n--- [Round {round_num}] Buyer Action Phase 2: Challenge & Rate ---")
@@ -314,9 +331,10 @@ async def main():
         # 打印回合统计信息
         print_round_statistics(round_num)
         
-        # 统计与记录：更新声誉历史
+        # 统计与记录：更新声誉历史（应用滞后显示：在回合 r 只公开到 r-REPUTATION_LAG 的评分）
+        ratings_cutoff_round = max(0, round_num - REPUTATION_LAG)
         with sqlite3.connect(DATABASE_PATH) as conn:
-            compute_and_update_reputation(conn, round_num)
+            compute_and_update_reputation(conn, round_num, ratings_up_to_round=ratings_cutoff_round if ratings_cutoff_round > 0 else None)
 
         #  更新历史记录 
         for seller_id in range(NUM_SELLERS):

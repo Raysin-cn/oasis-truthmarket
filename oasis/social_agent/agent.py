@@ -120,7 +120,7 @@ class SocialAgent(ChatAgent):
             "\n"
             "What do you think Helen should do?")
 
-    async def perform_action_by_llm(self):
+    async def perform_action_by_llm(self, extra_action: List[Union[FunctionTool, Callable]] = None):
         
         role = self.user_info.profile.get("other_info", {}).get("role")
 
@@ -150,6 +150,9 @@ class SocialAgent(ChatAgent):
             role_name="User",
             content=user_msg_content
         )
+
+        if extra_action:
+            self.add_tools(extra_action)
         
         try:
             response = await self.astep(user_msg)
@@ -166,11 +169,14 @@ class SocialAgent(ChatAgent):
                                 f"action: {action_name} with args: {args}")
             else:
                 agent_log.warning(f"Agent {self.social_agent_id} did not perform any action.")
-            
+
             return response
         except Exception as e:
             agent_log.error(f"Agent {self.social_agent_id} error: {e}")
             return e
+        finally:
+            if extra_action:
+                self.remove_tools(extra_action)
 
     async def perform_test(self):
         """
