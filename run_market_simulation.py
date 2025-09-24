@@ -21,7 +21,7 @@ NUM_SELLERS = 5
 NUM_BUYERS = 5
 SIMULATION_ROUNDS = 7
 DATABASE_PATH = 'market_sim.db'
-
+MARKET_TYPE = 'reputation_and_warrant'   #reputation_and_warrant or reputation_only
 
 def get_agent_state(agent_id: int, role: str, round_num: int = -1) -> dict:
     """获取智能体在特定回合或当前的状态。"""
@@ -183,7 +183,7 @@ async def main():
         agents_num=NUM_SELLERS,
         sys_prompt=SELLER_GENERATION_SYS_PROMPT,
         user_prompt=SELLER_GENERATION_USER_PROMPT,
-        available_actions=ActionType.get_warrant_market_actions(),
+        available_actions=ActionType.get_market_actions(MARKET_TYPE), 
         role="seller",
     )
     
@@ -193,7 +193,7 @@ async def main():
         agents_num=NUM_BUYERS,
         sys_prompt=BUYER_GENERATION_SYS_PROMPT,
         user_prompt=BUYER_GENERATION_USER_PROMPT,
-        available_actions=ActionType.get_warrant_market_actions(),
+        available_actions=ActionType.get_market_actions(MARKET_TYPE), 
         role="buyer"
     )
     
@@ -237,7 +237,7 @@ async def main():
                 history_string = format_seller_history(history_log)
                 
                 # 更新系统Prompt
-                prompt_template = agent.user_info.to_seller_master_prompt()
+                prompt_template = agent.user_info.to_system_message(market_type=MARKET_TYPE)
                 agent.system_message.content = prompt_template.format(
                     current_round=round_num,
                     current_budget=state['current_budget'],
@@ -258,7 +258,7 @@ async def main():
         for agent_id, agent in agent_graph.get_agents():
              if agent.user_info.profile.get("other_info", {}).get("role") == 'buyer':
                 state = get_agent_state(agent_id, 'buyer')
-                prompt_template = agent.user_info.to_buyer_master_prompt()
+                prompt_template = agent.user_info.to_system_message(market_type=MARKET_TYPE)
                 
                 agent.system_message.content = prompt_template.format(
                     current_round=round_num,
