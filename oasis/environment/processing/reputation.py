@@ -1,0 +1,124 @@
+import os
+import sqlite3
+from typing import Optional, Tuple
+
+DATABASE_PATH = os.getenv("MARKET_DB_PATH", "market_sim.db")
+
+
+def _connect(db_path: Optional[str] = None) -> sqlite3.Connection:
+    return sqlite3.connect(db_path or DATABASE_PATH)
+
+
+def ensure_tables(conn: sqlite3.Connection) -> None:
+    cursor = conn.cursor()
+    # reputation_history schema should already exist via SQL files,
+    # but we defensively ensure it here to avoid runtime failures.
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS reputation_history (
+            run_id INTEGER,
+            seed INTEGER,
+            round INTEGER,
+            seller_id INTEGER,
+            public_reputation_score INTEGER,
+            public_num_ratings INTEGER,
+            FOREIGN KEY(seller_id) REFERENCES user(user_id)
+        );
+        """
+    )
+    # Simple index for query speed
+    cursor.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_reputation_history_seller_round
+        ON reputation_history (seller_id, round);
+        """
+    )
+    conn.commit()
+
+
+def _get_previous_reputation(conn: sqlite3.Connection, seller_id: int) -> Tuple[int, int]:
+    """Return (score, count) from latest history row if exists, else defaults (1, 0)."""
+    cursor = conn.cursor()
+    cursor.execute(
+        """
+        SELECT public_reputation_score, public_num_ratings
+        FROM reputation_history
+        WHERE seller_id = ?
+        ORDER BY round DESC
+        LIMIT 1
+        """,
+        (seller_id,),
+    )
+    row = cursor.fetchone()
+    if row is None:
+        return 1, 0
+    return int(row[0] or 1), int(row[1] or 0)
+
+
+def _get_run_meta() -> Tuple[int, Optional[int]]:
+    # In absence of a run manager, default run_id=1 and optional seed from env
+    run_id = int(os.getenv("RUN_ID", "1"))
+    seed_env = os.getenv("SEED")
+    seed = int(seed_env) if seed_env is not None and seed_env.isdigit() else None
+    return run_id, seed
+
+
+def compute_and_update_reputation(conn: sqlite3.Connection, round_number: int) -> None:
+    """
+    Compute each seller's public reputation using cumulative average of ratings
+    up to current round and insert a snapshot into reputation_history.
+    Also update `user.reputation_score` for convenience.
+    """
+    ensure_tables(conn)
+    cursor = conn.cursor()
+
+    # Gather all ratings up to current round per seller
+    cursor.execute(
+        """
+        SELECT t.seller_id, COUNT(t.rating) as cnt, COALESCE(SUM(t.rating), 0)
+        FROM transactions t
+        WHERE t.rating IS NOT NULL AND t.round_number <= ?
+        GROUP BY t.seller_id
+        """,
+        (round_number,),
+    )
+    aggregated = {row[0]: (int(row[1]), int(row[2])) for row in cursor.fetchall()}
+
+    # Get list of all sellers from user table
+    cursor.execute("SELECT user_id FROM user WHERE role = 'seller'")
+    seller_ids = [r[0] for r in cursor.fetchall()]
+
+    run_id, seed = _get_run_meta()
+
+    for seller_id in seller_ids:
+        num_ratings, sum_ratings = aggregated.get(seller_id, (0, 0))
+        if num_ratings > 0:
+            avg_rating = round(sum_ratings / num_ratings)
+        else:
+            # Default initial reputation
+            avg_rating = 1
+
+        # Persist snapshot
+        cursor.execute(
+            """
+            INSERT INTO reputation_history (
+                run_id, seed, round, seller_id, public_reputation_score, public_num_ratings
+            ) VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            (run_id, seed, round_number, seller_id, int(avg_rating), int(num_ratings)),
+        )
+
+        # Update user table for live access in prompts
+        cursor.execute(
+            "UPDATE user SET reputation_score = ? WHERE user_id = ?",
+            (int(avg_rating), seller_id),
+        )
+
+    conn.commit()
+
+
+def backfill_reputation_for_all_rounds(max_round: int, db_path: Optional[str] = None) -> None:
+    """Utility to recompute and snapshot reputation for rounds 1..max_round."""
+    with _connect(db_path) as conn:
+        for r in range(1, max_round + 1):
+            compute_and_update_reputation(conn, r)

@@ -10,6 +10,8 @@ from oasis.social_platform.typing import ActionType
 from oasis.social_agent.agents_generator import generate_agent_from_LLM
 from prompt import format_seller_history, SELLER_GENERATION_SYS_PROMPT, SELLER_GENERATION_USER_PROMPT, BUYER_GENERATION_SYS_PROMPT, BUYER_GENERATION_USER_PROMPT
 from utils import print_round_statistics, clear_market, print_simulation_summary
+from oasis.environment.processing.reputation import compute_and_update_reputation
+from oasis.environment.processing.valunerability import run_detection
 
 from dotenv import load_dotenv
 load_dotenv(override=True)
@@ -22,6 +24,7 @@ NUM_SELLERS = 10
 NUM_BUYERS = 10
 SIMULATION_ROUNDS = 7
 DATABASE_PATH = 'market_sim.db'
+os.environ.setdefault('MARKET_DB_PATH', DATABASE_PATH)
 
 
 def get_agent_state(agent_id: int, role: str, round_num: int = -1) -> dict:
@@ -311,6 +314,10 @@ async def main():
         # 打印回合统计信息
         print_round_statistics(round_num)
         
+        # 统计与记录：更新声誉历史
+        with sqlite3.connect(DATABASE_PATH) as conn:
+            compute_and_update_reputation(conn, round_num)
+
         #  更新历史记录 
         for seller_id in range(NUM_SELLERS):
             round_summary = get_seller_round_summary(seller_id, round_num)
@@ -331,6 +338,11 @@ async def main():
 
         print(f"\n{'='*20} End of Round {round_num} {'='*20}")
 
+    
+    # 漏洞/操纵检测（整个模拟结束后一次性运行）
+    with sqlite3.connect(DATABASE_PATH) as conn:
+        run_detection(SIMULATION_ROUNDS)
+    print("Manipulation analysis completed.")
     
     await env.close()
     print_simulation_summary()
