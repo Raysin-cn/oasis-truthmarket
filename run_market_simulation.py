@@ -233,11 +233,12 @@ async def main():
         database_path=DATABASE_PATH
     )
     await env.reset()
+    available_tools = agent.env.action.get_openai_function_list()
+    name_to_tool = {t.func.__name__: t for t in available_tools}
+    
     print(f"Environment initialized. Database at '{DATABASE_PATH}'.")
     initialize_market_roles(agent_graph)
     sellers_history = {i: [] for i in range(NUM_SELLERS)}
-    
-    
     for round_num in range(1, SIMULATION_ROUNDS + 1):
         print(f"\n{'='*20} Starting Round {round_num}/{SIMULATION_ROUNDS} {'='*20}")
 
@@ -267,7 +268,16 @@ async def main():
                     reputation_score=state['reputation_score'],
                     history_summary=visible_history_string 
                 )
-                seller_actions[agent] = LLMAction()
+                # 条件注入额外工具：在允许时机暴露退出/重返市场动作
+                extra_tools = []
+                # 退出：在达到或超过 EXIT_ROUND 时允许
+                if round_num >= EXIT_ROUND and 'exit_market' in name_to_tool:
+                    extra_tools.append(name_to_tool['exit_market'])
+                # 重返：在达到或超过 REENTRY_ALLOWED_ROUND 且低声誉时允许
+                if round_num >= REENTRY_ALLOWED_ROUND and state.get('reputation_score', 0) <= 0 and 'reenter_market' in name_to_tool:
+                    extra_tools.append(name_to_tool['reenter_market'])
+
+                seller_actions[agent] = LLMAction(extra_action=extra_tools if extra_tools else None)
         
         if seller_actions:
             await env.step(seller_actions)

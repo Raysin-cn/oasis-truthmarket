@@ -786,13 +786,13 @@ class SocialAction:
 
     async def exit_market(self):
         """
-        Exits the market for the current round, earning no profit. This action is typically used to reset a negative reputation score back to zero.
+        Exits the market. 
         """
         return await self.perform_action(None, ActionType.EXIT_MARKET.value)
 
     async def reenter_market(self):
         """
-        Re-enters the market in the next round after having exited in a previous round.
+        Re-enters the market in the next round after having exited in a previous round. This action is typically used to reset a negative reputation score back to zero.
         """
         return await self.perform_action(None, ActionType.REENTER_MARKET.value)
 

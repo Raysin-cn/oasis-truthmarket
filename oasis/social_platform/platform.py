@@ -1865,31 +1865,28 @@ class Platform:
             return {"success": False, "error": str(e)}
 
     async def exit_market(self, agent_id: int, message: Any):
-        """处理卖家退出市场的后端逻辑。"""
+        """处理卖家退出市场的后端逻辑（概念性意图）。"""
         seller_id = agent_id
         current_time = self.sandbox_clock.get_time_step()
         try:
-            # 根据设计文档，主要操作是重置声誉分数
-            update_query = "UPDATE user SET reputation_score = 0 WHERE user_id = ?"
-            self.pl_utils._execute_db_command(update_query, (seller_id,), commit=True)
-
-            # 可以在 trace 表中记录此行为
-            self.pl_utils._record_trace(seller_id, ActionType.EXIT_MARKET.value, {}, current_time)
-
-            return {"success": True, "message": f"卖家 {seller_id} 已退出市场，声誉已重置。"}
+            # 概念性标记：仅记录退出意图，不做数据库状态修改
+            self.pl_utils._record_trace(seller_id, ActionType.EXIT_MARKET.value, message or {}, current_time)
+            return {"success": True, "message": f"卖家 {seller_id} 提交退出市场意图。"}
         except Exception as e:
             return {"success": False, "error": str(e)}
 
     async def reenter_market(self, agent_id: int, message: Any):
-        """处理卖家重新进入市场的后端逻辑。"""
+        """处理卖家重新进入市场的后端逻辑（刷新声誉）。"""
         seller_id = agent_id
         current_time = self.sandbox_clock.get_time_step()
         try:
-            # 这个动作主要是概念性的，表明一个意图。
-            # 平台层面可能不需要做数据库修改，因为卖家在下一回合默认就可以行动。
-            # 我们只在 trace 表中记录这个意图即可。
-            self.pl_utils._record_trace(seller_id, ActionType.REENTER_MARKET.value, {}, current_time)
+            # 按模拟语义：重置负声誉为 0（或直接设置为非负基线）
+            reset_needed = True if not message else message.get("reset_reputation", True)
+            if reset_needed:
+                update_query = "UPDATE user SET reputation_score = CASE WHEN reputation_score < 0 THEN 0 ELSE reputation_score END WHERE user_id = ?"
+                self.pl_utils._execute_db_command(update_query, (seller_id,), commit=True)
 
-            return {"success": True, "message": f"卖家 {seller_id} 已表示将在下一回合重新进入市场。"}
+            self.pl_utils._record_trace(seller_id, ActionType.REENTER_MARKET.value, message or {}, current_time)
+            return {"success": True, "message": f"卖家 {seller_id} 已重新进入市场，声誉已刷新。"}
         except Exception as e:
             return {"success": False, "error": str(e)}
