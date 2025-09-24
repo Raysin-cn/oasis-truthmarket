@@ -112,13 +112,25 @@ def get_product_listings() -> str:
         columns = [info[1] for info in cursor.fetchall()]
         if 'status' not in columns:
             return "Database schema is incorrect: 'post' table is missing the 'status' column."
-        cursor.execute("SELECT post_id, user_id, advertised_quality, price, has_warrant FROM post WHERE status = 'on_sale'")
+        cursor.execute(
+            """
+            SELECT p.post_id, p.user_id, p.advertised_quality, p.price, p.has_warrant, 
+                   COALESCE(u.reputation_score, 0) AS reputation_score
+            FROM post p
+            LEFT JOIN user u ON u.user_id = p.user_id
+            WHERE p.status = 'on_sale'
+            """
+        )
         products = cursor.fetchall()
         if products:
             listings = "Here is the list of products currently on sale:\n"
             for p in products:
                 warrant_info = " (Warranted)" if p[4] else ""
-                listings += f"- Product ID: {p[0]}, Seller ID: {p[1]}, Advertised Quality: {p[2]}, Price: ${p[3]:.2f}{warrant_info}\n"
+                seller_rep = p[5]
+                listings += (
+                    f"- Product ID: {p[0]}, Seller ID: {p[1]}, Seller Reputation: {seller_rep}, "
+                    f"Advertised Quality: {p[2]}, Price: ${p[3]:.2f}{warrant_info}\n"
+                )
     except sqlite3.Error as e:
         print(f"数据库查询错误 (get_product_listings): {e}")
     finally:
@@ -209,7 +221,7 @@ async def main():
         agents_num=NUM_BUYERS,
         sys_prompt=BUYER_GENERATION_SYS_PROMPT,
         user_prompt=BUYER_GENERATION_USER_PROMPT,
-        available_actions=ActionType.get_buyer_actions(),
+        available_actions=[],
         role="buyer"
     )
     
@@ -235,10 +247,20 @@ async def main():
     await env.reset()
     available_tools = agent.env.action.get_openai_function_list()
     name_to_tool = {t.func.__name__: t for t in available_tools}
-    
+
     print(f"Environment initialized. Database at '{DATABASE_PATH}'.")
     initialize_market_roles(agent_graph)
     sellers_history = {i: [] for i in range(NUM_SELLERS)}
+
+    # # 为买家移除默认动作工具，仅使用每阶段注入的 extra_action
+    # for _, agent in agent_graph.get_agents():
+    #     if agent.user_info.profile.get("other_info", {}).get("role") == 'buyer':
+    #         try:
+    #             if getattr(agent, 'action_tools', None):
+    #                 agent.remove_tools(agent.action_tools)
+    #                 agent.action_tools = []
+    #         except Exception:
+    #             pass
     for round_num in range(1, SIMULATION_ROUNDS + 1):
         print(f"\n{'='*20} Starting Round {round_num}/{SIMULATION_ROUNDS} {'='*20}")
 
@@ -271,10 +293,10 @@ async def main():
                 # 条件注入额外工具：在允许时机暴露退出/重返市场动作
                 extra_tools = []
                 # 退出：在达到或超过 EXIT_ROUND 时允许
-                if round_num >= EXIT_ROUND and 'exit_market' in name_to_tool:
+                if round_num >= EXIT_ROUND:
                     extra_tools.append(name_to_tool['exit_market'])
-                # 重返：在达到或超过 REENTRY_ALLOWED_ROUND 且低声誉时允许
-                if round_num >= REENTRY_ALLOWED_ROUND and state.get('reputation_score', 0) <= 0 and 'reenter_market' in name_to_tool:
+                # 重返：在达到或超过 REENTRY_ALLOWED_ROUND 
+                if round_num == REENTRY_ALLOWED_ROUND:
                     extra_tools.append(name_to_tool['reenter_market'])
 
                 seller_actions[agent] = LLMAction(extra_action=extra_tools if extra_tools else None)
@@ -298,7 +320,9 @@ async def main():
                     cumulative_utility=state['cumulative_utility'],
                     product_listings=product_listings_for_this_round
                 )
-                buyer_actions[agent] = LLMAction()
+                # 限定购买阶段工具：仅允许购买
+                purchase_tools = [name_to_tool['purchase_product_id']] if 'purchase_product_id' in name_to_tool else []
+                buyer_actions[agent] = LLMAction(extra_action=purchase_tools if purchase_tools else None)
         
         purchase_results = []
         if buyer_actions:
@@ -306,7 +330,7 @@ async def main():
         print("All purchase actions are attempted.")
 
         # 卖家重返机制：REENTRY_ALLOWED_ROUND 之后，允许被标记操纵/低声誉者重新进入（此处留接口，实际控制可依赖 platform 层）
-        if round_num >= REENTRY_ALLOWED_ROUND:
+        if round_num == REENTRY_ALLOWED_ROUND:
             print("Re-entry policy active for low-reputation/manipulators. (soft flag)")
 
         # 挑战与评价 
@@ -330,7 +354,11 @@ async def main():
                     true_quality=purchase_info.get("true_quality"),
                     has_warrant=purchase_info.get("has_warrant")
                 )
-                post_purchase_actions[agent] = LLMAction()
+                # 限定评分阶段工具：仅允许挑战保证与评分
+                phase2_tools = []
+                # phase2_tools.append(name_to_tool['challenge_warrant'])
+                phase2_tools.append(name_to_tool['rate_transaction'])
+                post_purchase_actions[agent] = LLMAction(extra_action=phase2_tools if phase2_tools else None)
         
         if post_purchase_actions:
             await env.step(post_purchase_actions)

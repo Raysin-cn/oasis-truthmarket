@@ -82,26 +82,23 @@ class SocialAgent(ChatAgent):
             content=system_message_content,  # system prompt
         )
 
-        if not available_actions:
-            agent_log.info("No available actions defined, using all actions.")
-            self.action_tools = self.env.action.get_openai_function_list()
-        else:
-            all_tools = self.env.action.get_openai_function_list()
-            all_possible_actions = [tool.func.__name__ for tool in all_tools]
 
-            for action in available_actions:
-                action_name = action.value if isinstance(
-                    action, ActionType) else action
-                if action_name not in all_possible_actions:
-                    agent_log.warning(
-                        f"Action {action_name} is not supported. Supported "
-                        f"actions are: {', '.join(all_possible_actions)}")
-            self.action_tools = [
-                tool for tool in all_tools if tool.func.__name__ in [
-                    a.value if isinstance(a, ActionType) else a
-                    for a in available_actions
-                ]
+        all_possible_tools = self.env.action.get_openai_function_list()
+        all_possible_actions = [tool.func.__name__ for tool in all_possible_tools]
+
+        for action in available_actions:
+            action_name = action.value if isinstance(
+                action, ActionType) else action
+            if action_name not in all_possible_actions:
+                agent_log.warning(
+                    f"Action {action_name} is not supported. Supported "
+                    f"actions are: {', '.join(all_possible_actions)}")
+        self.action_tools = [
+            tool for tool in all_possible_tools if tool.func.__name__ in [
+                a.value if isinstance(a, ActionType) else a
+                for a in available_actions
             ]
+        ]
         all_tools = (tools or []) + (self.action_tools or [])
         super().__init__(system_message=system_message,
                          model=model,
@@ -170,13 +167,16 @@ class SocialAgent(ChatAgent):
             else:
                 agent_log.warning(f"Agent {self.social_agent_id} did not perform any action.")
 
-            return response
         except Exception as e:
             agent_log.error(f"Agent {self.social_agent_id} error: {e}")
-            return e
+            response = e
+
         finally:
             if extra_action:
-                self.remove_tools(extra_action)
+                extra_action_names = [tool.func.__name__ for tool in extra_action]
+                self.remove_tools(extra_action_names)
+                
+            return response
 
     async def perform_test(self):
         """
