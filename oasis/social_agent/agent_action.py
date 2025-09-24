@@ -820,7 +820,7 @@ class SocialAction:
 
         Args:
             transaction_id (int): The unique identifier of the transaction to be rated.
-            rating (int): The rating to give. Use 1 for a positive rating (thumbs up) and -1 for a negative rating (thumbs down).
+            rating (int): The rating to give. Use an integer in the range [-2, -1, 0, 1, 2], where -2 means very bad, -1 means bad, 0 means neutral, 1 means good, and 2 means very good.
         """
         rating_details = {"transaction_id": transaction_id, "rating": rating}
         return await self.perform_action(rating_details, ActionType.RATE_TRANSACTION.value)

@@ -262,6 +262,8 @@ async def main():
     #         except Exception:
     #             pass
     for round_num in range(1, SIMULATION_ROUNDS + 1):
+        # 同步平台回合计数器
+        env.platform.sandbox_clock.round_step = round_num
         print(f"\n{'='*20} Starting Round {round_num}/{SIMULATION_ROUNDS} {'='*20}")
 
         # 卖家退场机制：超过 EXIT_ROUND 的回合后允许退出（此处仅标注，具体执行可在平台侧实现）

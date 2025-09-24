@@ -1695,7 +1695,7 @@ class Platform:
             """
             self.pl_utils._execute_db_command(
                 transaction_insert_query,
-                (post_id, seller_id, buyer_id, current_time, 
+                (post_id, seller_id, buyer_id, self.sandbox_clock.get_round_step(), 
                  seller_profit, buyer_utility, current_time),
                 commit=True
             )
@@ -1738,7 +1738,7 @@ class Platform:
             prod_q = product_details.get("product_quality")
             has_warrant = product_details.get("has_warrant", False)
             price = product_details.get("price")
-            round_number = self.sandbox_clock.get_time_step()
+            round_number = self.sandbox_clock.get_round_step()
 
             cost = self.market_params['hq_cost'] if prod_q == 'HQ' else self.market_params['lq_cost']
             
@@ -1785,9 +1785,8 @@ class Platform:
             update_trans_query = "UPDATE transactions SET rating = ? WHERE transaction_id = ?"
             self.pl_utils._execute_db_command(update_trans_query, (rating, transaction_id), commit=True)
             
-            # 3. 更新卖家的声誉分数
-            update_user_query = "UPDATE user SET reputation_score = reputation_score + ? WHERE user_id = ?"
-            self.pl_utils._execute_db_command(update_user_query, (rating, seller_id), commit=True)
+            # 3. 声誉分数不在此处即时累加，统一由离线计算模块按累计评分/滞后来写入
+            #    避免与 compute_and_update_reputation 的结果相互覆盖或双重计算。
 
             # 4. 在 trace 表中记录
             action_info = {"transaction_id": transaction_id, "rating": rating}
