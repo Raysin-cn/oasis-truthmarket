@@ -104,7 +104,8 @@ class SocialAgent(ChatAgent):
                          model=model,
                          scheduling_strategy='random_model',
                          tools=all_tools,
-                         max_iteration=max_iteration)
+                        #  max_iteration=max_iteration   #NOTE: shijun：我这边的camel-ai库似乎不能指定max_iteration，需要注意下版本
+                         )
         self.interview_record = interview_record
         self.agent_graph = agent_graph
         self.test_prompt = (
@@ -154,8 +155,20 @@ class SocialAgent(ChatAgent):
         try:
             response = await self.astep(user_msg)
             
+            # # 详细调试日志
+            # agent_log.info(f"=== AGENT {self.social_agent_id} ({role}) DEBUG ===")
+            # agent_log.info(f"LLM Response Content: {response.msg.content}")
+            # agent_log.info(f"Response Info Keys: {list(response.info.keys()) if response.info else 'None'}")
+            # if response.info and 'tool_calls' in response.info:
+            #     agent_log.info(f"Tool Calls Count: {len(response.info['tool_calls'])}")
+            #     agent_log.info(f"Tool Calls Content: {response.info['tool_calls']}")
+            # else:
+            #     agent_log.info("Tool Calls: None or empty")
+            # agent_log.info(f"Available Tools Count: {len(self.action_tools)}")
+            # agent_log.info(f"Available Tools: {[tool.func.__name__ for tool in self.action_tools]}")
+            # agent_log.info("=== END DEBUG ===")
             #将 agent_id 注入到返回结果中
-            if response.info and 'tool_calls' in response.info and response.info['tool_calls']:
+            if response.info and 'tool_calls' in response.info and response.info['tool_calls']:  #TODO： 这里buyer的tool_call是空的
                 for tool_call in response.info['tool_calls']:
                     action_name = tool_call.tool_name
                     args = tool_call.args
