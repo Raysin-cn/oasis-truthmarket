@@ -15,7 +15,7 @@ This project implements a multi-agent online market simulation environment featu
 
 ### 1. Prerequisites
 
-- Python 3.8+
+- Python 3.10+ (< 3.12)
 - OpenAI API Key
 
 ### 2. Install Dependencies
