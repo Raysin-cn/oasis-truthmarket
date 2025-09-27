@@ -100,7 +100,27 @@ class ActionType(Enum):
             cls.CHALLENGE_WARRANT,
             cls.RATE_TRANSACTION,
         ]
-        
+    
+    @classmethod
+    def get_market_actions(cls, market_type: str = 'reputation_and_warrant'):
+        """根据市场类型返回所有相关的动作列表。"""
+        if market_type == 'reputation_only':
+            return [
+                cls.LIST_PRODUCT,
+                cls.EXIT_MARKET,
+                cls.REENTER_MARKET,
+                cls.PURCHASE_PRODUCT_ID,
+                cls.RATE_TRANSACTION,
+            ]
+        else:  # 默认 'reputation_and_warrant'
+            return [
+                cls.LIST_PRODUCT,
+                cls.EXIT_MARKET,
+                cls.REENTER_MARKET,
+                cls.PURCHASE_PRODUCT_ID,
+                cls.CHALLENGE_WARRANT,
+                cls.RATE_TRANSACTION,
+            ]    
 
 
 class RecsysType(Enum):

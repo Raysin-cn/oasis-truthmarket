@@ -104,7 +104,7 @@ class SocialAgent(ChatAgent):
                          model=model,
                          scheduling_strategy='random_model',
                          tools=all_tools,
-                        #  max_iteration=max_iteration   #NOTE: shijun：我这边的camel-ai库似乎不能指定max_iteration，需要注意下版本
+                         max_iteration=max_iteration
                          )
         self.interview_record = interview_record
         self.agent_graph = agent_graph
@@ -168,7 +168,7 @@ class SocialAgent(ChatAgent):
             # agent_log.info(f"Available Tools: {[tool.func.__name__ for tool in self.action_tools]}")
             # agent_log.info("=== END DEBUG ===")
             #将 agent_id 注入到返回结果中
-            if response.info and 'tool_calls' in response.info and response.info['tool_calls']:  #TODO： 这里buyer的tool_call是空的
+            if response.info and 'tool_calls' in response.info and response.info['tool_calls']:  
                 for tool_call in response.info['tool_calls']:
                     action_name = tool_call.tool_name
                     args = tool_call.args

@@ -726,6 +726,7 @@ async def generate_agent_from_LLM(agents_num:int,
             model=model,
             agent_graph=agent_graph,
             available_actions=available_actions,
+            max_iteration = 1,
         )
 
         agent_graph.add_agent(agent)

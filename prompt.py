@@ -1,5 +1,91 @@
 # Market Simulation Prompts
 
+# ================== Market Rules Definitions ==================
+
+# 市场 A: 信誉 + 保证金 (Reputation and Warrant)
+MARKET_RULES_A = {
+    "seller": (
+        "1. **Reputation System**: Buyers can rate each transaction with a thumbs up (+1) or a thumbs down (-1). "
+        "Your Reputation Score is the sum of these ratings. A higher reputation may attract more buyers.\n"
+        "2. **Truth Warrant System**: You can offer a 'Truth Warrant' for your products. If you falsely advertise a warranted product "
+        "(e.g., advertise HQ, produce LQ) and the buyer challenges it, you will be heavily penalized, "
+        "losing a fixed amount of 4 points from your profit, overriding any sales income."
+    ),
+    "buyer": (
+        "1. **Reputation System**: You can rate each transaction with a thumbs up (+1) or a thumbs down (-1). "
+        "Your ratings contribute to the seller's reputation score, which may help you make future purchasing decisions.\n"
+        "2. **Truth Warrant System**: Sellers can offer 'Truth Warrants'. If you purchase a warranted product and find it "
+        "doesn't match the advertised quality, you can challenge it for a cost of $1. "
+        "A successful challenge will refund your purchase price and grant you a bonus."
+    )
+}
+
+# 市场 B: 只有信誉 (Reputation Only)
+MARKET_RULES_B = {
+    "seller": (
+        "1. **Reputation System**: Buyers can rate each transaction with a thumbs up (+1) or a thumbs down (-1). "
+        "Your Reputation Score is the sum of these ratings. A higher reputation may attract more buyers. "
+        "There is NO warrant system in this market."
+    ),
+    "buyer": (
+        "1. **Reputation System**: You can rate each transaction with a thumbs up (+1) or a thumbs down (-1). "
+        "Your ratings contribute to the seller's reputation score, which may help you make future purchasing decisions. "
+        "There is NO warrant system in this market, so you cannot challenge purchases."
+    )
+}
+
+# 将市场名称映射到规则集
+MARKET_CONFIG = {
+    'reputation_and_warrant': MARKET_RULES_A,
+    'reputation_only': MARKET_RULES_B,
+}
+
+
+# ================== Personas and History Formatting ==================
+
+# ================== Market Rules Definitions ==================
+
+# 市场 A: 信誉 + 保证金 (Reputation and Warrant)
+MARKET_RULES_A = {
+    "seller": (
+        "1. **Reputation System**: Buyers can rate each transaction with a thumbs up (+1) or a thumbs down (-1). "
+        "Your Reputation Score is the sum of these ratings. A higher reputation may attract more buyers.\n"
+        "2. **Truth Warrant System**: You can offer a 'Truth Warrant' for your products. If you falsely advertise a warranted product "
+        "(e.g., advertise HQ, produce LQ) and the buyer challenges it, you will be heavily penalized, "
+        "losing a fixed amount of 4 points from your profit, overriding any sales income."
+    ),
+    "buyer": (
+        "1. **Reputation System**: You can rate each transaction with a thumbs up (+1) or a thumbs down (-1). "
+        "Your ratings contribute to the seller's reputation score, which may help you make future purchasing decisions.\n"
+        "2. **Truth Warrant System**: Sellers can offer 'Truth Warrants'. If you purchase a warranted product and find it "
+        "doesn't match the advertised quality, you can challenge it for a cost of $1. "
+        "A successful challenge will refund your purchase price and grant you a bonus."
+    )
+}
+
+# 市场 B: 只有信誉 (Reputation Only)
+MARKET_RULES_B = {
+    "seller": (
+        "1. **Reputation System**: Buyers can rate each transaction with a thumbs up (+1) or a thumbs down (-1). "
+        "Your Reputation Score is the sum of these ratings. A higher reputation may attract more buyers. "
+        "There is NO warrant system in this market."
+    ),
+    "buyer": (
+        "1. **Reputation System**: You can rate each transaction with a thumbs up (+1) or a thumbs down (-1). "
+        "Your ratings contribute to the seller's reputation score, which may help you make future purchasing decisions. "
+        "There is NO warrant system in this market, so you cannot challenge purchases."
+    )
+}
+
+# 将市场名称映射到规则集
+MARKET_CONFIG = {
+    'reputation_and_warrant': MARKET_RULES_A,
+    'reputation_only': MARKET_RULES_B,
+}
+
+
+# ================== Personas and History Formatting ==================
+
 # # 买家 personas
 # BUYER_PERSONAS = [
 #     "You are a risk-taker. You are willing to try products from new sellers (reputation 0 or 1) to find good deals and discover new opportunities.",
