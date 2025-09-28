@@ -1737,14 +1737,12 @@ class Platform:
             adv_q = product_details.get("advertised_quality")
             prod_q = product_details.get("product_quality")
             has_warrant = product_details.get("has_warrant", False)
-            price = product_details.get("price")
             round_number = self.sandbox_clock.get_round_step()
 
             cost = self.market_params['hq_cost'] if prod_q == 'HQ' else self.market_params['lq_cost']
             
-            # 验证价格是否合理（可选的价格范围检查）
-            if price is None or price <= 0:
-                return {"success": False, "error": "Price must be a positive number."}
+            # 使用预设价格策略：高质量商品固定价格5，低质量商品固定价格3
+            price = self.market_params['hq_price'] if adv_q == 'HQ' else self.market_params['lq_price']
 
             insert_query = (
                 "INSERT INTO post (user_id, created_at, true_quality, advertised_quality, price, cost, has_warrant, is_sold, status, round_number) "
@@ -1758,10 +1756,10 @@ class Platform:
             )
             post_id = self.db_cursor.lastrowid
             
-            action_info = {"post_id": post_id, "details": product_details}
+            action_info = {"post_id": post_id, "details": product_details, "price": price}
             self.pl_utils._record_trace(seller_id, ActionType.LIST_PRODUCT.value, action_info, current_time)
             
-            return {"success": True, "post_id": post_id}
+            return {"success": True, "post_id": post_id, "price": price}
         except Exception as e:
             return {"success": False, "error": str(e)}
     

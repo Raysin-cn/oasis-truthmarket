@@ -27,11 +27,13 @@ from camel.memories import MemoryRecord
 from camel.messages import BaseMessage
 from camel.models import BaseModelBackend, ModelManager
 from camel.types import OpenAIBackendRole, ModelPlatformType
+from camel.prompts import TextPrompt
 
 from oasis.social_agent import AgentGraph, SocialAgent
 from oasis.social_platform import Channel, Platform
 from oasis.social_platform.config import Neo4jConfig, UserInfo
 from oasis.social_platform.typing import ActionType
+from prompt import SELLER_MASTER_PROMPT, BUYER_MASTER_PROMPT
 
 import itertools
 
@@ -709,20 +711,35 @@ async def generate_agent_from_LLM(agents_num:int,
             "nodes": [],
             "edges": [],
             "other_info": {},
+            # 添加System_prompt模板所需的静态键值对（直接放在profile顶层）
+            "user_profile": agent_info["user_char"],
+            "role": role,
+            "market_type": "reputation_and_warrant",  # 默认市场类型，可在后续修改
+            "market_rules": "",  # 将在运行时动态填充
+            "actions": "",  # 将在运行时动态填充
+            "payoff_matrix": "",  # 将在运行时动态填充
         }
-        profile["other_info"]["user_profile"] = agent_info["user_char"]
-        profile["other_info"]["role"] = role
+        
+        # 根据角色选择相应的TextPrompt模板
+        if role == 'seller':
+            template = SELLER_MASTER_PROMPT
+        elif role == 'buyer':
+            template = BUYER_MASTER_PROMPT
+        else:
+            template = None
 
         user_info = UserInfo(
             name=agent_info["username"],
             description=agent_info["description"],
             profile=profile,
             recsys_type='twitter',
+            market_type="reputation_and_warrant",  # 设置默认市场类型
         )
         agent_id = next(id_gen)
         agent = SocialAgent(
             agent_id=agent_id,
             user_info=user_info,
+            user_info_template=template,  # 传入TextPrompt模板
             model=model,
             agent_graph=agent_graph,
             available_actions=available_actions,

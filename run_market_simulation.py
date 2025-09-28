@@ -8,7 +8,7 @@ from oasis import SocialAgent, AgentGraph, UserInfo, make
 from oasis.environment.env_action import LLMAction
 from oasis.social_platform.typing import ActionType
 from oasis.social_agent.agents_generator import generate_agent_from_LLM
-from prompt import format_seller_history, SELLER_GENERATION_SYS_PROMPT, SELLER_GENERATION_USER_PROMPT, BUYER_GENERATION_SYS_PROMPT, BUYER_GENERATION_USER_PROMPT
+from prompt import format_seller_history, SELLER_GENERATION_SYS_PROMPT, SELLER_GENERATION_USER_PROMPT, BUYER_GENERATION_SYS_PROMPT, BUYER_GENERATION_USER_PROMPT, SELLER_ROUND_PROMPT, BUYER_ROUND_PROMPT
 from utils import print_round_statistics, clear_market, print_simulation_summary
 from oasis.environment.processing.reputation import compute_and_update_reputation
 from oasis.environment.processing.valunerability import run_detection
@@ -229,12 +229,14 @@ async def main():
     # 添加卖家 agents
     for agent_id, agent in seller_agent_graph.get_agents():
         agent.user_info.profile["other_info"]["role"] = "seller"
+        agent.user_info.market_type = MARKET_TYPE
         agent.env.is_market_sim = True
         agent_graph.add_agent(agent)
     
     # 添加买家 agents (重新分配 agent_id)
     for agent_id, agent in buyer_agent_graph.get_agents():
         agent.user_info.profile["other_info"]["role"] = "buyer"
+        agent.user_info.market_type = MARKET_TYPE
         agent.env.is_market_sim = True
         agent_graph.add_agent(agent)
 
@@ -250,16 +252,6 @@ async def main():
     print(f"Environment initialized. Database at '{DATABASE_PATH}'.")
     initialize_market_roles(agent_graph)
     sellers_history = {i: [] for i in range(NUM_SELLERS)}
-
-    # # 为买家移除默认动作工具，仅使用每阶段注入的 extra_action
-    # for _, agent in agent_graph.get_agents():
-    #     if agent.user_info.profile.get("other_info", {}).get("role") == 'buyer':
-    #         try:
-    #             if getattr(agent, 'action_tools', None):
-    #                 agent.remove_tools(agent.action_tools)
-    #                 agent.action_tools = []
-    #         except Exception:
-    #             pass
     for round_num in range(1, SIMULATION_ROUNDS + 1):
         # 同步平台回合计数器
         env.platform.sandbox_clock.round_step = round_num
@@ -272,6 +264,10 @@ async def main():
         # 卖家行动
         print(f"\n--- [Round {round_num}] Seller Action Phase ---")
         seller_actions = {}
+        
+        # 设置环境的市场阶段为 listing
+        env.market_phase = "listing"
+        
         for agent_id, agent in agent_graph.get_agents():
             if agent.user_info.profile.get("other_info", {}).get("role") == 'seller':
                 state = get_agent_state(agent_id, 'seller')
@@ -283,26 +279,32 @@ async def main():
                 else:
                     visible_history_string = format_seller_history(history_log)
                 
-                # 更新系统Prompt
-                prompt_template = agent.user_info.to_system_message(market_type=MARKET_TYPE)
-                agent.system_message.content = prompt_template.format(
-                    current_round=round_num,
-                    current_budget=state['current_budget'],
-                    reputation_score=state['reputation_score'],
-                    history_summary=visible_history_string,
-                    reputation_lag=REPUTATION_LAG,
-                    reentry_round=REENTRY_ALLOWED_ROUND
+                # 更新环境状态
+                env.current_round = round_num
+                
+                # 更新agent状态属性
+                agent.current_budget = state['current_budget']
+                agent.reputation_score = state['reputation_score']
+                agent.history_summary = visible_history_string
+                
+                # 系统Prompt已在SocialAgent实例化时设置（静态参数）
+                # 准备回合提示词（动态参数）
+                round_prompt = SELLER_ROUND_PROMPT.format(
+                    history_summary=visible_history_string
                 )
+                # 卖家在 listing 阶段可用的工具
+                listing_tools = [name_to_tool['list_product']] if 'list_product' in name_to_tool else []
+                
                 # 条件注入额外工具：在允许时机暴露退出/重返市场动作
-                extra_tools = []
-                # 退出：在达到或超过 EXIT_ROUND 时允许
                 if round_num >= EXIT_ROUND:
-                    extra_tools.append(name_to_tool['exit_market'])
-                # 重返：在达到或超过 REENTRY_ALLOWED_ROUND 
+                    listing_tools.append(name_to_tool['exit_market'])
                 if round_num == REENTRY_ALLOWED_ROUND:
-                    extra_tools.append(name_to_tool['reenter_market'])
+                    listing_tools.append(name_to_tool['reenter_market'])
 
-                seller_actions[agent] = LLMAction(extra_action=extra_tools if extra_tools else None)
+                seller_actions[agent] = LLMAction(
+                    extra_action=listing_tools,
+                    extra_prompt=round_prompt
+                )
         
         if seller_actions:
             await env.step(seller_actions)
@@ -312,20 +314,24 @@ async def main():
         buyer_actions = {}
         product_listings_for_this_round = get_product_listings()
         
+        # 设置环境的市场阶段为 purchase
+        env.market_phase = "purchase"
 
         for agent_id, agent in agent_graph.get_agents():
              if agent.user_info.profile.get("other_info", {}).get("role") == 'buyer':
                 state = get_agent_state(agent_id, 'buyer')
-                prompt_template = agent.user_info.to_system_message(market_type=MARKET_TYPE)
+                # 更新agent状态属性
+                agent.cumulative_utility = state['cumulative_utility']
                 
-                agent.system_message.content = prompt_template.format(
-                    current_round=round_num,
-                    cumulative_utility=state['cumulative_utility'],
-                    product_listings=product_listings_for_this_round
-                )
-                # 限定购买阶段工具：仅允许购买
+                # 系统Prompt已在SocialAgent实例化时设置（静态参数）
+                # 准备回合提示词（动态参数）
+                round_prompt = BUYER_ROUND_PROMPT.format()
+                # 买家在 purchase 阶段可用的工具：仅允许购买
                 purchase_tools = [name_to_tool['purchase_product_id']] if 'purchase_product_id' in name_to_tool else []
-                buyer_actions[agent] = LLMAction(extra_action=purchase_tools if purchase_tools else None)
+                buyer_actions[agent] = LLMAction(
+                    extra_action=purchase_tools,
+                    extra_prompt=round_prompt
+                )
         
         purchase_results = []
         if buyer_actions:
@@ -340,6 +346,9 @@ async def main():
         print(f"\n--- [Round {round_num}] Buyer Action Phase 2: Challenge & Rate ---")
         post_purchase_actions = {}
         
+        # 设置环境的市场阶段为 rating
+        env.market_phase = "rating"
+        
         successful_purchases = [res for res in purchase_results if res and res.get("success")]
 
         if successful_purchases:
@@ -349,20 +358,29 @@ async def main():
                 
                 agent = agent_graph.get_agent(agent_id)
 
-                prompt_template = agent.user_info.to_buyer_post_purchase_prompt()
-                agent.system_message.content = prompt_template.format(
-                    transaction_id=purchase_info.get("transaction_id"),
-                    post_id=purchase_info.get("post_id"),
-                    advertised_quality=purchase_info.get("advertised_quality"),
-                    true_quality=purchase_info.get("true_quality"),
-                    has_warrant=purchase_info.get("has_warrant"),
-                    buyer_utility=purchase_info.get("buyer_utility")
+                # 买家在 rating 阶段可用的工具：仅允许挑战保证与评分
+                rating_tools = []
+                # rating_tools.append(name_to_tool['challenge_warrant'])  # 暂时禁用挑战功能
+                if 'rate_transaction' in name_to_tool:
+                    rating_tools.append(name_to_tool['rate_transaction'])
+                
+                # 将购买信息存储到agent中，供环境观察使用
+                agent.last_purchase_info = {
+                    'transaction_id': purchase_info.get("transaction_id"),
+                    'post_id': purchase_info.get("post_id"),
+                    'advertised_quality': purchase_info.get("advertised_quality"),
+                    'true_quality': purchase_info.get("true_quality"),
+                    'has_warrant': purchase_info.get("has_warrant"),
+                    'buyer_utility': purchase_info.get("buyer_utility"),
+                    'purchase_price': purchase_info.get("purchase_price", 0),
+                    'seller_id': purchase_info.get("seller_id", 'N/A'),
+                    'seller_reputation': purchase_info.get("seller_reputation", 0)
+                }
+                
+                post_purchase_actions[agent] = LLMAction(
+                    extra_action=rating_tools,
+                    extra_prompt=""  # 环境观察信息将通过 market_phase="rating" 提供
                 )
-                # 限定评分阶段工具：仅允许挑战保证与评分
-                phase2_tools = []
-                # phase2_tools.append(name_to_tool['challenge_warrant'])
-                phase2_tools.append(name_to_tool['rate_transaction'])
-                post_purchase_actions[agent] = LLMAction(extra_action=phase2_tools if phase2_tools else None)
         
         if post_purchase_actions:
             await env.step(post_purchase_actions)

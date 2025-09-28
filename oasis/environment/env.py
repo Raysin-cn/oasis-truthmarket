@@ -68,6 +68,9 @@ class OasisEnv:
         self.agent_graph = agent_graph
         # Use a semaphore to limit the number of concurrent requests
         self.llm_semaphore = asyncio.Semaphore(semaphore)
+        # Environment state
+        self.current_round = 1
+        self.market_phase = "general"  # 当前市场阶段：listing, purchase, rating, general
         if isinstance(platform, DefaultPlatformType):
             if database_path is None:
                 raise ValueError(
@@ -121,11 +124,13 @@ class OasisEnv:
         self.agent_graph = await generate_custom_agents(
             channel=self.channel, agent_graph=self.agent_graph)
 
-    async def _perform_llm_action(self, agent, extra_action = None):
+    async def _perform_llm_action(self, agent, llm_action):
         r"""Send the request to the llm model and execute the action.
         """
         async with self.llm_semaphore:
-            return await agent.perform_action_by_llm(extra_action)
+            extra_action = llm_action.extra_action if hasattr(llm_action, 'extra_action') else None
+            extra_prompt = llm_action.extra_prompt if hasattr(llm_action, 'extra_prompt') else None
+            return await agent.perform_market_action(extra_action, extra_prompt, self.current_round, self.market_phase)
 
     async def _perform_interview_action(self, agent, interview_prompt: str):
         r"""Send the request to the llm model and execute the interview.

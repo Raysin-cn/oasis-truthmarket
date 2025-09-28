@@ -72,6 +72,12 @@ class SocialAgent(ChatAgent):
         self.user_info = user_info
         self.channel = channel or Channel()
         self.env = SocialEnvironment(SocialAction(agent_id, self.channel))
+        
+        # Agent 状态属性
+        self.current_budget = 100.0  # 卖家初始预算
+        self.reputation_score = 0    # 卖家声誉
+        self.cumulative_utility = 0  # 买家累积效用
+        self.history_summary = "This is the first round. You have no past performance data."
         if user_info_template is None:
             system_message_content = self.user_info.to_system_message()
         else:
@@ -118,8 +124,85 @@ class SocialAgent(ChatAgent):
             "\n"
             "What do you think Helen should do?")
 
-    async def perform_action_by_llm(self, extra_action: List[Union[FunctionTool, Callable]] = None):
+    async def perform_market_action(self, extra_action: List[Union[FunctionTool, Callable]] = None, extra_prompt: str = None, current_round: int = 1, market_phase: str = "general"):
+        """
+        执行市场模拟中的动作，包含环境观察和额外提示。
         
+        Args:
+            extra_action: 额外的工具列表
+            extra_prompt: 额外的提示信息
+            current_round: 当前回合数
+            market_phase: 市场阶段 ("listing", "purchase", "rating", "general")
+        """
+        role = self.user_info.profile.get("other_info", {}).get("role")
+
+        # 根据市场阶段获取相应的环境观察
+        env_prompt = await self.env.to_text_prompt(agent=self, current_round=current_round, market_phase=market_phase)
+        agent_log.info(
+            f"Agent {self.social_agent_id} ({role}) observing environment in {market_phase} phase: "
+            f"{env_prompt}")
+
+        # 构建用户消息内容：环境观察 + 额外提示
+        if role == 'seller':
+            base_content = (
+                "Based on your system instructions, which include your "
+                "history and current state, you must now execute your "
+                "chosen action for this round."
+            )
+        elif role == 'buyer':
+            base_content = (
+                "You have observed the current state of the market. "
+                "Based on your role, objectives, and the market rules "
+                "outlined in your system instructions, please decide on the "
+                "best action to take now."
+            )
+        else:
+            base_content = ""
+        
+        # 组合环境观察和额外提示
+        user_msg_content = f"{base_content}\n\n{env_prompt}"
+        if extra_prompt:
+            user_msg_content += f"\n\n## Additional Information:\n{extra_prompt}"
+
+        user_msg = BaseMessage.make_user_message(
+            role_name="User",
+            content=user_msg_content
+        )
+
+        if extra_action:
+            self.add_tools(extra_action)
+        
+        try:
+            response = await self.astep(user_msg)
+            
+            #将 agent_id 注入到返回结果中
+            if response.info and 'tool_calls' in response.info and response.info['tool_calls']:  
+                for tool_call in response.info['tool_calls']:
+                    action_name = tool_call.tool_name
+                    args = tool_call.args
+                    # 将 agent_id 添加到 platform 返回的结果字典中
+                    if isinstance(tool_call.result, dict):
+                        tool_call.result['agent_id'] = self.social_agent_id
+                    agent_log.info(f"Agent {self.social_agent_id} performed "
+                                f"action: {action_name} with args: {args}")
+            else:
+                agent_log.warning(f"Agent {self.social_agent_id} did not perform any action.")
+
+        except Exception as e:
+            agent_log.error(f"Agent {self.social_agent_id} error: {e}")
+            response = e
+
+        finally:
+            if extra_action:
+                extra_action_names = [tool.func.__name__ for tool in extra_action]
+                self.remove_tools(extra_action_names)
+                
+            return response
+
+    async def perform_action_by_llm(self, extra_action: List[Union[FunctionTool, Callable]] = None):
+        """
+        原始的 perform_action_by_llm 函数，保持原有功能不变。
+        """
         role = self.user_info.profile.get("other_info", {}).get("role")
 
         env_prompt = await self.env.to_text_prompt()
@@ -155,18 +238,6 @@ class SocialAgent(ChatAgent):
         try:
             response = await self.astep(user_msg)
             
-            # # 详细调试日志
-            # agent_log.info(f"=== AGENT {self.social_agent_id} ({role}) DEBUG ===")
-            # agent_log.info(f"LLM Response Content: {response.msg.content}")
-            # agent_log.info(f"Response Info Keys: {list(response.info.keys()) if response.info else 'None'}")
-            # if response.info and 'tool_calls' in response.info:
-            #     agent_log.info(f"Tool Calls Count: {len(response.info['tool_calls'])}")
-            #     agent_log.info(f"Tool Calls Content: {response.info['tool_calls']}")
-            # else:
-            #     agent_log.info("Tool Calls: None or empty")
-            # agent_log.info(f"Available Tools Count: {len(self.action_tools)}")
-            # agent_log.info(f"Available Tools: {[tool.func.__name__ for tool in self.action_tools]}")
-            # agent_log.info("=== END DEBUG ===")
             #将 agent_id 注入到返回结果中
             if response.info and 'tool_calls' in response.info and response.info['tool_calls']:  
                 for tool_call in response.info['tool_calls']:

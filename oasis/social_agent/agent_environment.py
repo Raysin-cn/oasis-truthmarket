@@ -87,6 +87,10 @@ class SocialEnvironment(Environment):
         "posts content. Do not limit your action in just `like` to like posts")
     
     market_env_template = Template(
+        "Current Round: $current_round / 7\n"
+        "Current Budget: $$current_budget\n"
+        "Reputation Score: $reputation_score\n"
+        "Cumulative Utility: $cumulative_utility\n\n"
         "Current available products:\n$products")
 
     def __init__(self, action: SocialAction):
@@ -154,19 +158,89 @@ class SocialEnvironment(Environment):
             groups_env = "No groups."
         return groups_env
 
-    def get_market_environment(self) -> str:
-        """为市场模拟获取环境信息，直接展示商品列表。"""
-        products = get_product_listings_for_env()
-        return self.market_env_template.substitute(products=products)
+    def get_market_environment(self, agent=None, current_round=1, market_phase="general") -> str:
+        """为市场模拟获取环境信息，根据不同的市场阶段提供不同的观察内容。"""
+        from prompt import MarketEnv_prompt
+        
+        if not agent:
+            # 如果没有agent信息，返回基本环境信息
+            return f"Current Round: {current_round}/7\nNo agent information available."
+        
+        role = agent.user_info.profile.get("other_info", {}).get("role")
+        
+        if market_phase == "listing" and role == "seller":
+            # 卖家在listing阶段：观察上一阶段的购买反馈和当前市场状态
+            previous_feedback = self._get_previous_feedback(agent)
+            available_products = get_product_listings_for_env()
+            total_profit = getattr(agent, 'total_profit', 0)
+            
+            return MarketEnv_prompt.SELLER_LISTING_ENV.format(
+                previous_feedback=previous_feedback,
+                current_round=current_round,
+                current_budget=agent.current_budget,
+                reputation_score=agent.reputation_score,
+                total_profit=total_profit,
+                available_products=available_products
+            )
+            
+        elif market_phase == "purchase" and role == "buyer":
+            # 买家在purchase阶段：观察当前可购买的商品和卖家信息
+            available_products = get_product_listings_for_env()
+            seller_reputation_info = self._get_seller_reputation_info()
+            
+            return MarketEnv_prompt.BUYER_PURCHASE_ENV.format(
+                current_round=current_round,
+                cumulative_utility=agent.cumulative_utility,
+                available_products=available_products,
+                seller_reputation_info=seller_reputation_info
+            )
+            
+        elif market_phase == "rating" and role == "buyer":
+            # 买家在rating阶段：观察购买后的产品具体信息
+            purchase_info = getattr(agent, 'last_purchase_info', {})
+            
+            return MarketEnv_prompt.BUYER_RATING_ENV.format(
+                transaction_id=purchase_info.get('transaction_id', 'N/A'),
+                post_id=purchase_info.get('post_id', 'N/A'),
+                advertised_quality=purchase_info.get('advertised_quality', 'N/A'),
+                true_quality=purchase_info.get('true_quality', 'N/A'),
+                has_warrant=purchase_info.get('has_warrant', False),
+                purchase_price=purchase_info.get('purchase_price', 0),
+                buyer_utility=purchase_info.get('buyer_utility', 0),
+                seller_id=purchase_info.get('seller_id', 'N/A'),
+                seller_reputation=purchase_info.get('seller_reputation', 0)
+            )
+            
+        else:
+            # 其他情况返回基本环境信息
+            return f"Current Round: {current_round}/7\nRole: {role}, Phase: {market_phase}\nNo specific environment template available."
+    
+    def _get_previous_feedback(self, agent) -> str:
+        """获取上一阶段的购买反馈信息"""
+        # 这里应该从数据库或agent的历史记录中获取反馈信息
+        # 暂时返回模拟数据
+        if hasattr(agent, 'history_summary') and agent.history_summary != "This is the first round. You have no past performance data.":
+            return agent.history_summary
+        else:
+            return "No previous feedback available. This is your first round."
+    
+    def _get_seller_reputation_info(self) -> str:
+        """获取卖家声誉信息"""
+        # 这里应该从数据库或平台中获取所有卖家的声誉信息
+        # 暂时返回模拟数据
+        return "Seller reputation information will be displayed here."
 
     async def to_text_prompt(
         self,
         include_posts: bool = True,
         include_followers: bool = True,
         include_follows: bool = True,
+        agent=None,
+        current_round=1,
+        market_phase="general",
     ) -> str:
         if self.is_market_sim:
-            return self.get_market_environment()
+            return self.get_market_environment(agent, current_round, market_phase)
         else:
             followers_env = (await self.get_followers_env()
                             if include_follows else "No followers.")

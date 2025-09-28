@@ -210,3 +210,4 @@ __marimo__/
 # Personal
 *.db
 .temp
+*.png
