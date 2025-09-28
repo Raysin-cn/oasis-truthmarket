@@ -17,7 +17,7 @@ from dotenv import load_dotenv
 load_dotenv(override=True)
 
 
-# 实验配置
+# Experiment configuration
 
 TOTAL_AGENTS = 6
 NUM_SELLERS = 10
@@ -26,20 +26,20 @@ SIMULATION_ROUNDS = 7
 DATABASE_PATH = 'market_sim.db'
 os.environ.setdefault('MARKET_DB_PATH', DATABASE_PATH)
 
-# 超参数（根据 proposals ）
+# Hyperparameters (based on proposals)
 REPUTATION_LAG = 1  # ratings from round t available to public at t+REPUTATION_LAG
 REENTRY_ALLOWED_ROUND = 5
 INITIAL_WINDOW_ROUNDS = [1, 2]  # rounds to hide full history
 EXIT_ROUND = 7  # after round 7 sellers may exit
-MARKET_TYPE = 'reputation_and_warrant'   #reputation_and_warrant or reputation_only
+MARKET_TYPE = 'reputation_only'   #reputation_and_warrant or reputation_only
 
 def get_agent_state(agent_id: int, role: str, round_num: int = -1) -> dict:
-    """获取智能体在特定回合或当前的状态。"""
+    """Get the state of an agent at a specific round or current state."""
     if not os.path.exists(DATABASE_PATH):
-        # 如果是卖家，返回初始预算和声誉
+        # If seller, return initial budget and reputation
         if role == 'seller':
             return {'current_budget': 100.0, 'reputation_score': 0, 'total_profit': 0}
-        # 如果是买家，返回初始效用
+        # If buyer, return initial utility
         else:
             return {'cumulative_utility': 0, 'total_utility': 0}
 
@@ -49,7 +49,7 @@ def get_agent_state(agent_id: int, role: str, round_num: int = -1) -> dict:
     state = {}
     try:
         if role == 'seller':
-            # 获取卖家基本信息
+            # Get seller basic information
             cursor.execute(
                 "SELECT budget, reputation_score, profit_utility_score FROM user WHERE user_id = ?",
                 (agent_id,)
@@ -59,7 +59,7 @@ def get_agent_state(agent_id: int, role: str, round_num: int = -1) -> dict:
             state['reputation_score'] = result[1] if result else 0
             state['total_profit'] = result[2] if result and result[2] is not None else 0
             
-            # 获取该回合的销售情况
+            # Get sales information for this round
             if round_num > 0:
                 cursor.execute(
                     "SELECT COUNT(*), SUM(seller_profit) FROM transactions WHERE seller_id = ? AND round_number = ?",
@@ -70,7 +70,7 @@ def get_agent_state(agent_id: int, role: str, round_num: int = -1) -> dict:
                 state['round_profit'] = sales_result[1] if sales_result and sales_result[1] is not None else 0
         
         elif role == 'buyer':
-            # 获取买家基本信息
+            # Get buyer basic information
             cursor.execute(
                 "SELECT profit_utility_score FROM user WHERE user_id = ?",
                 (agent_id,)
@@ -79,7 +79,7 @@ def get_agent_state(agent_id: int, role: str, round_num: int = -1) -> dict:
             state['cumulative_utility'] = result[0] if result and result[0] is not None else 0
             state['total_utility'] = result[0] if result and result[0] is not None else 0
             
-            # 获取该回合的购买情况
+            # Get purchase information for this round
             if round_num > 0:
                 cursor.execute(
                     "SELECT COUNT(*), SUM(buyer_utility) FROM transactions WHERE buyer_id = ? AND round_number = ?",
@@ -90,8 +90,8 @@ def get_agent_state(agent_id: int, role: str, round_num: int = -1) -> dict:
                 state['round_utility'] = purchase_result[1] if purchase_result and purchase_result[1] is not None else 0
     
     except sqlite3.Error as e:
-        print(f"数据库查询错误 (get_agent_state): {e}")
-        # 出错时返回默认值
+        print(f"Database query error (get_agent_state): {e}")
+        # Return default values on error
         if role == 'seller':
             state = {'current_budget': 100.0, 'reputation_score': 0, 'total_profit': 0}
         else:
@@ -131,13 +131,13 @@ def get_product_listings() -> str:
                     f"Advertised Quality: {p[2]}, Price: ${p[3]:.2f}{warrant_info}\n"
                 )
     except sqlite3.Error as e:
-        print(f"数据库查询错误 (get_product_listings): {e}")
+        print(f"Database query error (get_product_listings): {e}")
     finally:
         conn.close()
     return listings
 
 def get_seller_round_summary(seller_id: int, round_num: int) -> dict:
-    """获取卖家在特定回合的上架商品信息和销售状态。"""
+    """Get seller's product listing information and sales status for a specific round."""
     summary = {"quality": "Did not list", "sold": "No", "price": 0}
     if not os.path.exists(DATABASE_PATH):
         return summary
@@ -145,10 +145,10 @@ def get_seller_round_summary(seller_id: int, round_num: int) -> dict:
     conn = sqlite3.connect(DATABASE_PATH)
     cursor = conn.cursor()
     try:
-        # 在 post 表中按 user_id 和 round_number 查询
+        # Query in post table by user_id and round_number
         cursor.execute(
             "SELECT advertised_quality, is_sold, price FROM post WHERE user_id = ? AND round_number = ? ORDER BY post_id DESC LIMIT 1",
-            (seller_id, round_num) # 查询当前回合 (round_num)
+            (seller_id, round_num) # Query current round (round_num)
         )
         result = cursor.fetchone()
         if result:
@@ -156,14 +156,14 @@ def get_seller_round_summary(seller_id: int, round_num: int) -> dict:
             summary["sold"] = "Yes" if result[1] else "No"
             summary["price"] = result[2] if result[1] else 0
     except sqlite3.Error as e:
-        print(f"数据库查询错误 (get_seller_round_summary): {e}")
+        print(f"Database query error (get_seller_round_summary): {e}")
     finally:
         conn.close()
     return summary
 
 
 def initialize_market_roles(agent_graph: AgentGraph):
-    """在数据库中为所有智能体设置角色和初始状态。"""
+    """Set roles and initial states for all agents in the database."""
     print("Initializing market roles in the database...")
     conn = sqlite3.connect(DATABASE_PATH)
     cursor = conn.cursor()
@@ -171,13 +171,13 @@ def initialize_market_roles(agent_graph: AgentGraph):
         for agent_id, agent in agent_graph.get_agents():
             role = agent.user_info.profile.get("other_info", {}).get("role")
             if role == 'seller':
-                # 为卖家设置初始预算和声誉
+                # Set initial budget and reputation for seller
                 cursor.execute(
                     "UPDATE user SET role = ?, budget = ?, reputation_score = ?, profit_utility_score = ? WHERE agent_id = ?",
                     ('seller', 100.0, 0, 0.0, agent_id) 
                 )
             elif role == 'buyer':
-                # 为买家设置角色和初始分数
+                # Set role and initial score for buyer
                 cursor.execute(
                     "UPDATE user SET role = ?, profit_utility_score = ? WHERE agent_id = ?",
                     ('buyer', 0.0, agent_id)
@@ -185,7 +185,7 @@ def initialize_market_roles(agent_graph: AgentGraph):
         conn.commit()
         print("Market roles initialized successfully.")
     except sqlite3.Error as e:
-        print(f"数据库错误 (initialize_market_roles): {e}")
+        print(f"Database error (initialize_market_roles): {e}")
     finally:
         conn.close()
                 
@@ -204,7 +204,7 @@ async def main():
     agent_graph = AgentGraph()
 
 
-    # 生成卖家 agents
+    # Generate seller agents
     print("Generating seller agents...")
     seller_agent_graph = await generate_agent_from_LLM(
         agents_num=NUM_SELLERS,
@@ -214,7 +214,7 @@ async def main():
         role="seller",
     )
     
-    # 生成买家 agents
+    # Generate buyer agents
     print("Generating buyer agents...")
     buyer_agent_graph = await generate_agent_from_LLM(
         agents_num=NUM_BUYERS,
@@ -224,7 +224,7 @@ async def main():
         role="buyer"
     )
     
-    # 合并 agent graphs
+    # Merge agent graphs
     
     # 添加卖家 agents
     for agent_id, agent in seller_agent_graph.get_agents():
