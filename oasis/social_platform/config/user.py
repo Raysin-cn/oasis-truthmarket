@@ -15,9 +15,7 @@
 import warnings
 from dataclasses import dataclass
 from typing import Any
-
 from camel.prompts import TextPrompt
-from prompt import MARKET_CONFIG, get_seller_actions_and_payoff, get_buyer_actions_and_payoff, SELLER_MASTER_PROMPT, BUYER_MASTER_PROMPT
 
 @dataclass
 class UserInfo:
@@ -53,37 +51,6 @@ class UserInfo:
         elif role == 'buyer':
             return self.to_buyer_master_prompt()
         return ""
-
-    def to_seller_master_prompt(self) -> str:
-        """Generate general master prompt for sellers using TextPrompt template."""
-        # Prepare parameters required by template
-        market_rules = MARKET_CONFIG.get(self.market_type, {}).get('seller', "No rules defined for this role.")
-        actions, payoff_matrix = get_seller_actions_and_payoff(self.market_type)
-        
-        # Use TextPrompt template
-        return SELLER_MASTER_PROMPT.format(
-            market_type=self.market_type,
-            market_rules=market_rules,
-            actions=actions,
-            payoff_matrix=payoff_matrix,
-            user_profile=self.profile.get("other_info", {}).get("user_profile", "You are a seller.")
-        )
-
-    def to_buyer_master_prompt(self) -> str:
-        """Generate general master prompt for buyers using TextPrompt template."""
-        # Prepare parameters required by template
-        market_rules = MARKET_CONFIG.get(self.market_type, {}).get('buyer', "No rules defined for this role.")
-        available_actions, payoff_matrix = get_buyer_actions_and_payoff(self.market_type)
-        
-        # Use TextPrompt template
-        return BUYER_MASTER_PROMPT.format(
-            market_type=self.market_type,
-            market_rules=market_rules,
-            actions=available_actions,
-            payoff_matrix=payoff_matrix,
-            user_profile=self.profile.get("other_info", {}).get("user_profile", "You are a buyer.")
-        )
-    
 
     def to_reddit_system_message(self) -> str:
         name_string = ""

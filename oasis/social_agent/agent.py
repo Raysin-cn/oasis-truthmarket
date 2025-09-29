@@ -64,8 +64,8 @@ class SocialAgent(ChatAgent):
                                        List[BaseModelBackend],
                                        ModelManager]] = None,
                  agent_graph: "AgentGraph" = None,
-                 available_actions: list[ActionType] = None,
-                 tools: Optional[List[Union[FunctionTool, Callable]]] = None,
+                 available_actions: list[ActionType] = [],
+                 tools: Optional[List[Union[FunctionTool, Callable]]] = [],
                  max_iteration: int = 1,
                  interview_record: bool = False):
         self.social_agent_id = agent_id

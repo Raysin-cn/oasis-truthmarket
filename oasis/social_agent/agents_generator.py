@@ -33,7 +33,7 @@ from oasis.social_agent import AgentGraph, SocialAgent
 from oasis.social_platform import Channel, Platform
 from oasis.social_platform.config import Neo4jConfig, UserInfo
 from oasis.social_platform.typing import ActionType
-from prompt import SELLER_MASTER_PROMPT, BUYER_MASTER_PROMPT
+from prompt import get_prompt_child
 
 import itertools
 
@@ -664,7 +664,7 @@ async def generate_agent_from_LLM(agents_num:int,
                                 sys_prompt:str, 
                                 user_prompt:str,
                                 role:str,
-                                available_actions: list[ActionType] = [],
+                                market_type: str,
                                 agent_graph: AgentGraph = None,
                                 agent_checkpoint_save: bool = True):
 
@@ -707,42 +707,38 @@ async def generate_agent_from_LLM(agents_num:int,
         agent_graph = AgentGraph(backend="igraph")
     
     for _, agent_info in enumerate(user_trait_list):
+        # 根据角色选择相应的TextPrompt模板
+        template = get_prompt_child(role, "MASTER_PROMPT", market_type)
+        
         profile = {
             "nodes": [],
             "edges": [],
             "other_info": {},
-            # 添加System_prompt模板所需的静态键值对（直接放在profile顶层）
+            # 添加System_prompt模板所需的静态键值对
             "user_profile": agent_info["user_char"],
             "role": role,
-            "market_type": "reputation_and_warrant",  # 默认市场类型，可在后续修改
-            "market_rules": "",  # 将在运行时动态填充
-            "actions": "",  # 将在运行时动态填充
-            "payoff_matrix": "",  # 将在运行时动态填充
+            "market_type": market_type, 
+            "market_rules": get_prompt_child(role, "MARKET_RULES", market_type),  
+            "payoff_matrix": get_prompt_child(role, "PAYOFF_MATRIX", market_type),  
         }
+
         
-        # 根据角色选择相应的TextPrompt模板
-        if role == 'seller':
-            template = SELLER_MASTER_PROMPT
-        elif role == 'buyer':
-            template = BUYER_MASTER_PROMPT
-        else:
-            template = None
 
         user_info = UserInfo(
             name=agent_info["username"],
             description=agent_info["description"],
             profile=profile,
             recsys_type='twitter',
-            market_type="reputation_and_warrant",  # 设置默认市场类型
+            market_type=market_type,
         )
         agent_id = next(id_gen)
         agent = SocialAgent(
             agent_id=agent_id,
             user_info=user_info,
-            user_info_template=template,  # 传入TextPrompt模板
+            user_info_template=template, 
             model=model,
             agent_graph=agent_graph,
-            available_actions=available_actions,
+            # available_actions=get_prompt_child(role, "ACTIONS", market_type), 
             max_iteration = 1,
         )
 

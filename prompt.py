@@ -2,45 +2,6 @@
 
 from camel.prompts import TextPrompt
 
-# ================== Market Rules Definitions ==================
-
-# Market A: Reputation + Warrant
-MARKET_RULES_A = {
-    "seller": (
-        "1. **Reputation System**: Buyers can rate each transaction with a thumbs up (+1) or a thumbs down (-1). "
-        "Your Reputation Score is the sum of these ratings. A higher reputation may attract more buyers.\n"
-        "2. **Truth Warrant System**: You can offer a 'Truth Warrant' for your products. If you falsely advertise a warranted product "
-        "(e.g., advertise HQ, produce LQ) and the buyer challenges it, you will be heavily penalized, "
-        "losing a fixed amount of 4 points from your profit, overriding any sales income."
-    ),
-    "buyer": (
-        "1. **Reputation System**: You can rate each transaction with a thumbs up (+1) or a thumbs down (-1). "
-        "Your ratings contribute to the seller's reputation score, which may help you make future purchasing decisions.\n"
-        "2. **Truth Warrant System**: Sellers can offer 'Truth Warrants'. If you purchase a warranted product and find it "
-        "doesn't match the advertised quality, you can challenge it for a cost of $1. "
-        "A successful challenge will refund your purchase price and grant you a bonus."
-    )
-}
-
-# Market B: Reputation Only
-MARKET_RULES_B = {
-    "seller": (
-        "1. **Reputation System**: Buyers can rate each transaction with a thumbs up (+1) or a thumbs down (-1). "
-        "Your Reputation Score is the sum of these ratings. A higher reputation may attract more buyers. "
-        "There is NO warrant system in this market."
-    ),
-    "buyer": (
-        "1. **Reputation System**: You can rate each transaction with a thumbs up (+1) or a thumbs down (-1). "
-        "Your ratings contribute to the seller's reputation score, which may help you make future purchasing decisions. "
-        "There is NO warrant system in this market, so you cannot challenge purchases."
-    )
-}
-
-# Map market names to rule sets
-MARKET_CONFIG = {
-    'reputation_and_warrant': MARKET_RULES_A,
-    'reputation_only': MARKET_RULES_B,
-}
 
 # ================== Seller_prompt ==================
 
@@ -94,11 +55,6 @@ Your goal is to make strategic decisions to maximize your CUMULATIVE profit.
 # MARKET RULES
 {market_rules}
 
-# STRATEGIC OPTIONS (AVAILABLE ACTIONS)
-{actions}
-- `exit_market()`: A strategic retreat. You should ONLY use this action if your reputation score is negative. Exiting resets your reputation to 0 but you earn no profit for that round.
-- `reenter_market()`: If you have previously exited, use this to start selling again.
-
 # PAYOFF MATRIX (Your Profit Calculation if Product is Sold)
 {payoff_matrix}
 
@@ -108,7 +64,6 @@ You must decide and execute EXACTLY ONE action for this round based on your pers
 1.  **Assess your situation**: Analyze your current reputation and past performance from the summary.
 2.  **Formulate a Strategy**: Based on your PERSONALITY, decide your plan for this round.
 3.  **Execute the Action**: You MUST call one of the available functions.
-    - **Default Action Rule**: If your analysis does not lead you to a clear decision to `exit_market` or `reenter_market`, your default action **MUST BE** to `list_product`. You must always take an action.
 
 Provide your step-by-step reasoning first, then execute your chosen function call.
 """)
@@ -146,6 +101,21 @@ Make each seller distinct by varying:
 - Approach to business (e.g., enthusiastic, cautious, innovative, traditional)
 - Long-term vs short-term thinking"""
     
+    MARKET_RULES : dict[str, str] ={
+        "reputation_only":"""
+        "1. **Reputation System**: Buyers can rate each transaction with a thumbs up (+1) or a thumbs down (-1). "
+        "Your Reputation Score is the sum of these ratings. A higher reputation may attract more buyers. "
+        "There is NO warrant system in this market."
+        """,
+        "reputation_and_warrant":"""
+        "1. **Reputation System**: Buyers can rate each transaction with a thumbs up (+1) or a thumbs down (-1). "
+        "Your Reputation Score is the sum of these ratings. A higher reputation may attract more buyers.\n"
+        "2. **Truth Warrant System**: You can offer a 'Truth Warrant' for your products. If you falsely advertise a warranted product "
+        "(e.g., advertise HQ, produce LQ) and the buyer challenges it, you will be heavily penalized, "
+        "losing a fixed amount of 4 points from your profit, overriding any sales income."
+        """
+    } 
+
     @staticmethod
     def get_actions_and_payoff(market_type: str) -> tuple[str, str]:
         """Select seller actions and payoff matrix based on market_type."""
@@ -209,9 +179,6 @@ Your only goal is to make strategic decisions to maximize your cumulative utilit
 # MARKET RULES
 {market_rules}
 
-# AVAILABLE ACTIONS
-{actions}
-
 # PAYOFF MATRIX (Your Utility Calculation)
 {payoff_matrix}
 
@@ -249,6 +216,23 @@ Make each buyer distinct by varying:
 - Personal motto or signature
 - Shopping style (e.g., impulsive, analytical, bargain-seeker, quality-focused)
 - Information gathering behavior"""
+
+    MARKET_RULES : dict[str, str] = {
+        "reputation_only":
+        """
+        "1. **Reputation System**: You can rate each transaction with a thumbs up (+1) or a thumbs down (-1). "
+        "Your ratings contribute to the seller's reputation score, which may help you make future purchasing decisions. "
+        "There is NO warrant system in this market, so you cannot challenge purchases.
+        """,
+        "reputation_and_warrant":
+        """
+        "1. **Reputation System**: You can rate each transaction with a thumbs up (+1) or a thumbs down (-1). "
+        "Your ratings contribute to the seller's reputation score, which may help you make future purchasing decisions.\n"
+        "2. **Truth Warrant System**: Sellers can offer 'Truth Warrants'. If you purchase a warranted product and find it "
+        "doesn't match the advertised quality, you can challenge it for a cost of $1. "
+        "A successful challenge will refund your purchase price and grant you a bonus."
+        """
+    } 
     
     @staticmethod
     def get_actions_and_payoff(market_type: str) -> tuple[str, str]:
@@ -322,12 +306,6 @@ Based on your purchase experience and the product details, decide how to rate th
 # ================== Backward Compatibility ==================
 # Keep original variable names for backward compatibility
 
-# Market configuration
-MARKET_CONFIG = {
-    'reputation_and_warrant': MARKET_RULES_A,
-    'reputation_only': MARKET_RULES_B,
-}
-
 # Seller-related variables
 SELLER_ACTIONS = Seller_prompt.ACTIONS
 SELLER_PAYOFF_MATRIX = Seller_prompt.PAYOFF_MATRIX
@@ -364,3 +342,20 @@ def format_seller_history(history_log: list) -> str:
         history_string += f"- Round {entry['round']}: Listed a {entry['quality']} product. Sold: {entry['sold']}. Round Profit: {entry['profit']:.2f}. New Reputation: {entry['reputation']:.1f}. Total Profit: {entry.get('total_profit', 0):.2f}\n"
     
     return history_string
+
+
+def get_prompt_child(role: str, child: str, market_type: str = None):
+    # 选择对应的类
+    cls = Seller_prompt if role == 'seller' else Buyer_prompt if role == 'buyer' else None
+
+    # 需要根据market_type选择的属性
+    market_type_dict_keys = ['ACTIONS', 'PAYOFF_MATRIX', 'MARKET_RULES', 'MASTER_PROMPT']
+    child_upper = child.upper()
+
+    attr = getattr(cls, child_upper)
+
+    # 如果属性是dict并且需要market_type，则取对应market_type的值
+    if child_upper in market_type_dict_keys and isinstance(attr, dict):
+        return attr.get(market_type)
+    else:
+        return attr

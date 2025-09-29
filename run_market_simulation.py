@@ -210,7 +210,7 @@ async def main():
         agents_num=NUM_SELLERS,
         sys_prompt=SELLER_GENERATION_SYS_PROMPT,
         user_prompt=SELLER_GENERATION_USER_PROMPT,
-        available_actions=ActionType.get_market_actions(MARKET_TYPE), 
+        market_type = MARKET_TYPE,
         role="seller",
     )
     
@@ -220,24 +220,17 @@ async def main():
         agents_num=NUM_BUYERS,
         sys_prompt=BUYER_GENERATION_SYS_PROMPT,
         user_prompt=BUYER_GENERATION_USER_PROMPT,
-        available_actions=ActionType.get_market_actions(MARKET_TYPE), 
+        market_type = MARKET_TYPE,
         role="buyer"
     )
     
-    # Merge agent graphs
     
     # Add seller agents
     for agent_id, agent in seller_agent_graph.get_agents():
-        agent.user_info.profile["other_info"]["role"] = "seller"
-        agent.user_info.market_type = MARKET_TYPE
-        agent.env.is_market_sim = True
         agent_graph.add_agent(agent)
     
     # Add buyer agents (reassign agent_id)
     for agent_id, agent in buyer_agent_graph.get_agents():
-        agent.user_info.profile["other_info"]["role"] = "buyer"
-        agent.user_info.market_type = MARKET_TYPE
-        agent.env.is_market_sim = True
         agent_graph.add_agent(agent)
 
     env = make(
