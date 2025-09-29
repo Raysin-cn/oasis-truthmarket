@@ -158,7 +158,7 @@ class OasisEnv:
                         else:
                             tasks.append(agent.perform_action_by_data(single_action.action_type, **single_action.action_args))
                     elif isinstance(single_action, LLMAction):
-                        tasks.append(self._perform_llm_action(agent, single_action.extra_action))
+                        tasks.append(self._perform_llm_action(agent, single_action))
             else:
                 if isinstance(action, ManualAction):
                     if action.action_type == ActionType.INTERVIEW:
@@ -167,7 +167,7 @@ class OasisEnv:
                     else:
                         tasks.append(agent.perform_action_by_data(action.action_type, **action.action_args))
                 elif isinstance(action, LLMAction):
-                    tasks.append(self._perform_llm_action(agent, action.extra_action))
+                    tasks.append(self._perform_llm_action(agent, action))
 
         # 执行所有任务并提取、返回结果列表
         responses = await asyncio.gather(*tasks)

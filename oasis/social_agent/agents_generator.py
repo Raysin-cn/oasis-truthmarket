@@ -685,7 +685,7 @@ async def generate_agent_from_LLM(agents_num:int,
         system_message = sys_prompt,
     )
 
-    for i in range(agents_num - len(user_trait_list)):
+    for i in range(max(0, agents_num-len(user_trait_list))):
         user_message = user_prompt.format(i)
         user_trait_response = generator_agent.step(user_message)
         
@@ -706,7 +706,10 @@ async def generate_agent_from_LLM(agents_num:int,
     if agent_graph is None:
         agent_graph = AgentGraph(backend="igraph")
     
-    for _, agent_info in enumerate(user_trait_list):
+    for idx, agent_info in enumerate(user_trait_list):
+        if idx >= agents_num:
+            break
+
         # 根据角色选择相应的TextPrompt模板
         template = get_prompt_child(role, "MASTER_PROMPT", market_type)
         
@@ -743,5 +746,6 @@ async def generate_agent_from_LLM(agents_num:int,
         )
 
         agent_graph.add_agent(agent)
+
 
     return agent_graph

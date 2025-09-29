@@ -66,6 +66,8 @@ You must decide and execute EXACTLY ONE action for this round based on your pers
 3.  **Execute the Action**: You MUST call one of the available functions.
 
 Provide your step-by-step reasoning first, then execute your chosen function call.
+Please actively take actions and participate in the market. Do not repeatedly refuse to execute any action.
+
 """)
     
     # Seller round prompt template (dynamic parameters)
@@ -255,7 +257,6 @@ class MarketEnv_prompt:
 
 ## Current Market Status
 - Current Round: {current_round}/7
-- Your Current Budget: ${current_budget}
 - Your Reputation Score: {reputation_score}
 - Your Total Profit So Far: ${total_profit}
 

@@ -20,8 +20,8 @@ load_dotenv(override=True)
 # Experiment configuration
 
 TOTAL_AGENTS = 6
-NUM_SELLERS = 10
-NUM_BUYERS = 10
+NUM_SELLERS = 3
+NUM_BUYERS = 3
 SIMULATION_ROUNDS = 7
 DATABASE_PATH = 'market_sim.db'
 os.environ.setdefault('MARKET_DB_PATH', DATABASE_PATH)
@@ -56,7 +56,7 @@ def get_agent_state(agent_id: int, role: str, round_num: int = -1) -> dict:
             )
             result = cursor.fetchone()
             state['current_budget'] = result[0] if result else 100.0
-            state['reputation_score'] = result[1] if result else 0
+            state['reputation_score'] = result[1] if result and result[1] is not None else 0
             state['total_profit'] = result[2] if result and result[2] is not None else 0
             
             # Get sales information for this round
@@ -227,10 +227,12 @@ async def main():
     
     # Add seller agents
     for agent_id, agent in seller_agent_graph.get_agents():
+        agent.env.is_market_sim = True
         agent_graph.add_agent(agent)
     
     # Add buyer agents (reassign agent_id)
     for agent_id, agent in buyer_agent_graph.get_agents():
+        agent.env.is_market_sim = True
         agent_graph.add_agent(agent)
 
     env = make(
@@ -239,8 +241,6 @@ async def main():
         database_path=DATABASE_PATH
     )
     await env.reset()
-    available_tools = agent.env.action.get_openai_function_list()
-    name_to_tool = {t.func.__name__: t for t in available_tools}
 
     print(f"Environment initialized. Database at '{DATABASE_PATH}'.")
     initialize_market_roles(agent_graph)
@@ -286,13 +286,13 @@ async def main():
                     history_summary=visible_history_string
                 )
                 # Tools available for sellers in listing phase
-                listing_tools = [name_to_tool['list_product']] if 'list_product' in name_to_tool else []
+                listing_tools = ['list_product']
                 
                 # Conditionally inject additional tools: expose exit/re-enter market actions when allowed
                 if round_num >= EXIT_ROUND:
-                    listing_tools.append(name_to_tool['exit_market'])
+                    listing_tools.append('exit_market')
                 if round_num == REENTRY_ALLOWED_ROUND:
-                    listing_tools.append(name_to_tool['reenter_market'])
+                    listing_tools.append('reenter_market')
 
                 seller_actions[agent] = LLMAction(
                     extra_action=listing_tools,
@@ -305,7 +305,6 @@ async def main():
 
         print(f"\n--- [Round {round_num}] Buyer Action Phase 1: Purchase ---")
         buyer_actions = {}
-        product_listings_for_this_round = get_product_listings()
         
         # Set environment market phase to purchase
         env.market_phase = "purchase"
@@ -320,7 +319,7 @@ async def main():
                 # Prepare round prompt (dynamic parameters)
                 round_prompt = BUYER_ROUND_PROMPT.format()
                 # Tools available for buyers in purchase phase: only allow purchase
-                purchase_tools = [name_to_tool['purchase_product_id']] if 'purchase_product_id' in name_to_tool else []
+                purchase_tools = ['purchase_product_id']
                 buyer_actions[agent] = LLMAction(
                     extra_action=purchase_tools,
                     extra_prompt=round_prompt
@@ -352,10 +351,7 @@ async def main():
                 agent = agent_graph.get_agent(agent_id)
 
                 # Tools available for buyers in rating phase: only allow challenge warrant and rating
-                rating_tools = []
-                # rating_tools.append(name_to_tool['challenge_warrant'])  # Temporarily disable challenge function
-                if 'rate_transaction' in name_to_tool:
-                    rating_tools.append(name_to_tool['rate_transaction'])
+                rating_tools = ['rate_transaction']
                 
                 # Store purchase information in agent for environment observation
                 agent.last_purchase_info = {
@@ -387,7 +383,7 @@ async def main():
         # Statistics and recording: update reputation history (apply lag display: in round r only show ratings up to r-REPUTATION_LAG)
         ratings_cutoff_round = max(0, round_num - REPUTATION_LAG)
         with sqlite3.connect(DATABASE_PATH) as conn:
-            compute_and_update_reputation(conn, round_num, ratings_up_to_round=ratings_cutoff_round if ratings_cutoff_round > 0 else None)
+            compute_and_update_reputation(conn, round_num, ratings_up_to_round=ratings_cutoff_round)
 
         # Update history records 
         for seller_id in range(NUM_SELLERS):
@@ -398,12 +394,30 @@ async def main():
             round_profit = new_state.get('round_profit', 0)
             total_profit = new_state.get('total_profit', 0)
 
+            # Calculate reputation that will be shown in the NEXT round (include current round ratings)
+            next_round_cutoff = max(0, round_num + 1 - REPUTATION_LAG)
+            with sqlite3.connect(DATABASE_PATH) as conn:
+                cursor = conn.cursor()
+                cursor.execute(
+                    """
+                    SELECT COUNT(t.rating) as cnt, COALESCE(SUM(t.rating), 0)
+                    FROM transactions t
+                    WHERE t.rating IS NOT NULL AND t.round_number <= ? AND t.seller_id = ?
+                    """,
+                    (next_round_cutoff, seller_id),
+                )
+                result = cursor.fetchone()
+                if result and result[0] > 0:
+                    next_round_reputation = round(result[1] / result[0])
+                else:
+                    next_round_reputation = 0
+
             sellers_history[seller_id].append({
                 "round": round_num,
                 "quality": round_summary["quality"], 
                 "sold": round_summary["sold"], 
                 "profit": round_profit,
-                "reputation": new_state['reputation_score'],
+                "reputation": next_round_reputation,  # Use reputation that will be shown next round
                 "total_profit": total_profit
             })
 

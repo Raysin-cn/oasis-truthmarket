@@ -91,6 +91,7 @@ class SocialAgent(ChatAgent):
 
         all_possible_tools = self.env.action.get_openai_function_list()
         all_possible_actions = [tool.func.__name__ for tool in all_possible_tools]
+        self.all_possible_actions_dict = {tool.func.__name__: tool for tool in all_possible_tools}
 
         for action in available_actions:
             action_name = action.value if isinstance(
@@ -134,7 +135,7 @@ class SocialAgent(ChatAgent):
             current_round: Current round number
             market_phase: Market phase ("listing", "purchase", "rating", "general")
         """
-        role = self.user_info.profile.get("other_info", {}).get("role")
+        role = self.user_info.profile.get("role")
 
         # Get corresponding environment observation based on market phase
         env_prompt = await self.env.to_text_prompt(agent=self, current_round=current_round, market_phase=market_phase)
@@ -170,7 +171,8 @@ class SocialAgent(ChatAgent):
         )
 
         if extra_action:
-            self.add_tools(extra_action)
+            extra_tool = [self.all_possible_actions_dict[extra_action_name] for extra_action_name in extra_action]
+            self.add_tools(extra_tool)
         
         try:
             response = await self.astep(user_msg)
@@ -194,8 +196,7 @@ class SocialAgent(ChatAgent):
 
         finally:
             if extra_action:
-                extra_action_names = [tool.func.__name__ for tool in extra_action]
-                self.remove_tools(extra_action_names)
+                self.remove_tools(extra_action)
                 
             return response
 

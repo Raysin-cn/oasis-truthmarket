@@ -166,7 +166,7 @@ class SocialEnvironment(Environment):
             # 如果没有agent信息，返回基本环境信息
             return f"Current Round: {current_round}/7\nNo agent information available."
         
-        role = agent.user_info.profile.get("other_info", {}).get("role")
+        role = agent.user_info.profile.get("role")
         
         if market_phase == "listing" and role == "seller":
             # 卖家在listing阶段：观察上一阶段的购买反馈和当前市场状态
@@ -177,7 +177,6 @@ class SocialEnvironment(Environment):
             return MarketEnv_prompt.SELLER_LISTING_ENV.format(
                 previous_feedback=previous_feedback,
                 current_round=current_round,
-                current_budget=agent.current_budget,
                 reputation_score=agent.reputation_score,
                 total_profit=total_profit,
                 available_products=available_products
@@ -228,7 +227,7 @@ class SocialEnvironment(Environment):
         """获取卖家声誉信息"""
         # 这里应该从数据库或平台中获取所有卖家的声誉信息
         # 暂时返回模拟数据
-        return "Seller reputation information will be displayed here."
+        return "Seller reputation information can't be view."
 
     async def to_text_prompt(
         self,

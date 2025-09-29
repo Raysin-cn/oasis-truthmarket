@@ -73,7 +73,7 @@ def compute_and_update_reputation(conn: sqlite3.Connection, round_number: int, r
     ensure_tables(conn)
     cursor = conn.cursor()
 
-    effective_max_round = round_number if ratings_up_to_round is None else int(ratings_up_to_round)
+    effective_max_round = round_number if ratings_up_to_round is None else max(0, int(ratings_up_to_round))
 
     # 以 effective_max_round 作为评分聚合窗口上限
     cursor.execute(
@@ -96,7 +96,7 @@ def compute_and_update_reputation(conn: sqlite3.Connection, round_number: int, r
     for seller_id in seller_ids:
         num_ratings, sum_ratings = aggregated.get(seller_id, (0, 0))
         if num_ratings > 0:
-            avg_rating = round(sum_ratings)
+            avg_rating = round(sum_ratings / num_ratings)
         else:
             # Default initial reputation
             avg_rating = 0
