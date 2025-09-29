@@ -262,7 +262,7 @@ async def main():
         env.market_phase = "listing"
         
         for agent_id, agent in agent_graph.get_agents():
-            if agent.user_info.profile.get("other_info", {}).get("role") == 'seller':
+            if agent.user_info.profile.get("role") == 'seller':
                 state = get_agent_state(agent_id, 'seller')
 
                 # Hide complete history in initial window (show only aggregated/summary or empty)
@@ -311,7 +311,7 @@ async def main():
         env.market_phase = "purchase"
 
         for agent_id, agent in agent_graph.get_agents():
-             if agent.user_info.profile.get("other_info", {}).get("role") == 'buyer':
+             if agent.user_info.profile.get("role") == 'buyer':
                 state = get_agent_state(agent_id, 'buyer')
                 # Update agent state attributes
                 agent.cumulative_utility = state['cumulative_utility']
