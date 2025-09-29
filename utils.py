@@ -4,7 +4,7 @@ import os
 DATABASE_PATH = 'market_sim.db'
 
 def print_round_statistics(round_num: int):
-    """打印当前回合的收益统计信息。"""
+    """Print current round profit statistics."""
     if not os.path.exists(DATABASE_PATH):
         return
     
@@ -13,7 +13,7 @@ def print_round_statistics(round_num: int):
     try:
         print(f"\n--- Round {round_num} Statistics ---")
         
-        # 卖家统计
+        # Seller statistics
         cursor.execute("""
             SELECT COUNT(DISTINCT seller_id), SUM(seller_profit), AVG(seller_profit)
             FROM transactions WHERE round_number = ?
@@ -22,7 +22,7 @@ def print_round_statistics(round_num: int):
         if seller_stats and seller_stats[0] > 0:
             print(f"Sellers: {seller_stats[0]} active, Total Profit: {seller_stats[1]:.2f}, Avg Profit: {seller_stats[2]:.2f}")
         
-        # 买家统计
+        # Buyer statistics
         cursor.execute("""
             SELECT COUNT(DISTINCT buyer_id), SUM(buyer_utility), AVG(buyer_utility)
             FROM transactions WHERE round_number = ?
@@ -31,7 +31,7 @@ def print_round_statistics(round_num: int):
         if buyer_stats and buyer_stats[0] > 0:
             print(f"Buyers: {buyer_stats[0]} active, Total Utility: {buyer_stats[1]:.2f}, Avg Utility: {buyer_stats[2]:.2f}")
         
-        # 交易统计
+        # Transaction statistics
         cursor.execute("""
             SELECT COUNT(*), SUM(p.price), AVG(p.price)
             FROM transactions t 
@@ -42,7 +42,7 @@ def print_round_statistics(round_num: int):
         if transaction_stats and transaction_stats[0] > 0:
             print(f"Transactions: {transaction_stats[0]}, Total Value: {transaction_stats[1]:.2f}, Avg Price: {transaction_stats[2]:.2f}")
         
-        # 挑战统计
+        # Challenge statistics
         cursor.execute("""
             SELECT COUNT(*), SUM(CASE WHEN challenge_reward > 0 THEN 1 ELSE 0 END)
             FROM transactions WHERE round_number = ? AND is_challenged = 1
@@ -52,30 +52,30 @@ def print_round_statistics(round_num: int):
             print(f"Challenges: {challenge_stats[0]} total, {challenge_stats[1]} successful")
             
     except sqlite3.Error as e:
-        print(f"数据库错误 (print_round_statistics): {e}")
+        print(f"Database error (print_round_statistics): {e}")
     finally:
         conn.close()
 
 def clear_market():
-    """将所有在售商品的状态更新为'expired'，实现市场清空。"""
+    """Update all products on sale status to 'expired' to clear the market."""
     if not os.path.exists(DATABASE_PATH):
         return
     conn = sqlite3.connect(DATABASE_PATH)
     cursor = conn.cursor()
     try:
-        # 将所有状态为 'on_sale' 的商品更新为 'expired'
+        # Update all products with status 'on_sale' to 'expired'
         cursor.execute("UPDATE post SET status = 'expired' WHERE status = 'on_sale'")
         conn.commit()
-        # 获取被影响的行数，用于调试
+        # Get number of affected rows for debugging
         changes = conn.total_changes
         print(f"Market cleared: {changes} unsold products have been removed from sale.")
     except sqlite3.Error as e:
-        print(f"数据库错误 (clear_market): {e}")
+        print(f"Database error (clear_market): {e}")
     finally:
         conn.close()
 
 def print_simulation_summary():
-    """打印整个模拟的总结统计信息。"""
+    """Print summary statistics for the entire simulation."""
     if not os.path.exists(DATABASE_PATH):
         return
     
@@ -86,7 +86,7 @@ def print_simulation_summary():
         print("SIMULATION SUMMARY")
         print(f"{'='*50}")
         
-        # 总体交易统计
+        # Overall transaction statistics
         cursor.execute("""
             SELECT COUNT(*), SUM(p.price), AVG(p.price)
             FROM transactions t 
@@ -98,7 +98,7 @@ def print_simulation_summary():
             print(f"Total Market Value: {total_stats[1]:.2f}")
             print(f"Average Transaction Value: {total_stats[2]:.2f}")
         
-        # 卖家表现统计
+        # Seller performance statistics
         cursor.execute("""
             SELECT COUNT(DISTINCT seller_id), SUM(seller_profit), AVG(seller_profit), 
                    MAX(seller_profit), MIN(seller_profit)
@@ -113,7 +113,7 @@ def print_simulation_summary():
             print(f"  Best Seller Profit: {seller_performance[3]:.2f}")
             print(f"  Worst Seller Profit: {seller_performance[4]:.2f}")
         
-        # 买家表现统计
+        # Buyer performance statistics
         cursor.execute("""
             SELECT COUNT(DISTINCT buyer_id), SUM(buyer_utility), AVG(buyer_utility),
                    MAX(buyer_utility), MIN(buyer_utility)
@@ -128,7 +128,7 @@ def print_simulation_summary():
             print(f"  Best Buyer Utility: {buyer_performance[3]:.2f}")
             print(f"  Worst Buyer Utility: {buyer_performance[4]:.2f}")
         
-        # 挑战统计
+        # Challenge statistics
         cursor.execute("""
             SELECT COUNT(*), SUM(CASE WHEN challenge_reward > 0 THEN 1 ELSE 0 END),
                    AVG(CASE WHEN challenge_reward > 0 THEN 1.0 ELSE 0.0 END)
@@ -144,6 +144,6 @@ def print_simulation_summary():
         print(f"{'='*50}")
             
     except sqlite3.Error as e:
-        print(f"数据库错误 (print_simulation_summary): {e}")
+        print(f"Database error (print_simulation_summary): {e}")
     finally:
         conn.close()

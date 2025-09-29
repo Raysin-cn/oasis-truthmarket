@@ -44,7 +44,7 @@ class UserInfo:
 
     def to_system_message(self) -> str:
         """
-        根据角色和市场类型路由到正确的master prompt生成函数。
+        Route to the correct master prompt generation function based on role and market type.
         """
         role = self.profile.get("other_info", {}).get("role")
         
@@ -55,12 +55,12 @@ class UserInfo:
         return ""
 
     def to_seller_master_prompt(self) -> str:
-        """为卖家生成通用的主提示词，使用TextPrompt模板。"""
-        # 准备模板所需的参数
+        """Generate general master prompt for sellers using TextPrompt template."""
+        # Prepare parameters required by template
         market_rules = MARKET_CONFIG.get(self.market_type, {}).get('seller', "No rules defined for this role.")
         actions, payoff_matrix = get_seller_actions_and_payoff(self.market_type)
         
-        # 使用TextPrompt模板
+        # Use TextPrompt template
         return SELLER_MASTER_PROMPT.format(
             market_type=self.market_type,
             market_rules=market_rules,
@@ -70,12 +70,12 @@ class UserInfo:
         )
 
     def to_buyer_master_prompt(self) -> str:
-        """为买家生成通用的主提示词，使用TextPrompt模板。"""
-        # 准备模板所需的参数
+        """Generate general master prompt for buyers using TextPrompt template."""
+        # Prepare parameters required by template
         market_rules = MARKET_CONFIG.get(self.market_type, {}).get('buyer', "No rules defined for this role.")
         available_actions, payoff_matrix = get_buyer_actions_and_payoff(self.market_type)
         
-        # 使用TextPrompt模板
+        # Use TextPrompt template
         return BUYER_MASTER_PROMPT.format(
             market_type=self.market_type,
             market_rules=market_rules,

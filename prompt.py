@@ -4,7 +4,7 @@ from camel.prompts import TextPrompt
 
 # ================== Market Rules Definitions ==================
 
-# 市场 A: 信誉 + 保证金 (Reputation and Warrant)
+# Market A: Reputation + Warrant
 MARKET_RULES_A = {
     "seller": (
         "1. **Reputation System**: Buyers can rate each transaction with a thumbs up (+1) or a thumbs down (-1). "
@@ -22,7 +22,7 @@ MARKET_RULES_A = {
     )
 }
 
-# 市场 B: 只有信誉 (Reputation Only)
+# Market B: Reputation Only
 MARKET_RULES_B = {
     "seller": (
         "1. **Reputation System**: Buyers can rate each transaction with a thumbs up (+1) or a thumbs down (-1). "
@@ -36,7 +36,7 @@ MARKET_RULES_B = {
     )
 }
 
-# 将市场名称映射到规则集
+# Map market names to rule sets
 MARKET_CONFIG = {
     'reputation_and_warrant': MARKET_RULES_A,
     'reputation_only': MARKET_RULES_B,
@@ -45,9 +45,9 @@ MARKET_CONFIG = {
 # ================== Seller_prompt ==================
 
 class Seller_prompt:
-    """卖家相关的所有提示词和配置"""
+    """All seller-related prompts and configurations"""
     
-    # 卖家在不同市场下的可用动作描述
+    # Available action descriptions for sellers in different markets
     ACTIONS: dict[str, str] = {
         'reputation_only': (
             "- `list_product(advertised_quality: str, product_quality: str)`: Your primary action to make a profit. Note: `has_warrant` is NOT available."
@@ -57,7 +57,7 @@ class Seller_prompt:
         ),
     }
     
-    # 卖家在不同市场下的收益矩阵描述
+    # Payoff matrix descriptions for sellers in different markets
     PAYOFF_MATRIX: dict[str, str] = {
         'reputation_only': (
             """
@@ -80,7 +80,7 @@ class Seller_prompt:
         ).strip(),
     }
     
-    # 卖家系统提示词模板（静态参数）
+    # Seller system prompt template (static parameters)
     MASTER_PROMPT = TextPrompt("""
 # CONTEXT
 You are a Seller Agent in a multi-round online marketplace simulation ('{market_type}' market). Your sole objective is to maximize your total profit over 7 rounds.
@@ -113,7 +113,7 @@ You must decide and execute EXACTLY ONE action for this round based on your pers
 Provide your step-by-step reasoning first, then execute your chosen function call.
 """)
     
-    # 卖家回合提示词模板（动态参数）
+    # Seller round prompt template (dynamic parameters)
     ROUND_PROMPT = TextPrompt("""
 # PREVIOUS ROUNDS' SUMMARY
 {history_summary}
@@ -121,12 +121,12 @@ Provide your step-by-step reasoning first, then execute your chosen function cal
 Please make your decision for this round.
 """)
     
-    # LLM 生成卖家的系统提示词
+    # LLM generation system prompt for sellers
     GENERATION_SYS_PROMPT = """You are an expert in creating diverse seller personas for a market simulation.
 Your task is to generate unique seller characteristics that will lead to different behaviors in an online marketplace.
 Each seller should have distinct backgrounds, professions, ages, interests, genders, and personal mottos, resulting in a wide variety of personalities and approaches."""
     
-    # LLM 生成卖家的用户提示词
+    # LLM generation user prompt for sellers
     GENERATION_USER_PROMPT = """Create a unique seller persona for agent {0} in a market simulation.
 The seller operates in an online marketplace where they can list products with different quality levels (High Quality HQ or Low Quality LQ).
 
@@ -148,7 +148,7 @@ Make each seller distinct by varying:
     
     @staticmethod
     def get_actions_and_payoff(market_type: str) -> tuple[str, str]:
-        """基于 market_type 选择卖家的 actions 与 payoff matrix。"""
+        """Select seller actions and payoff matrix based on market_type."""
         actions = Seller_prompt.ACTIONS.get(market_type, Seller_prompt.ACTIONS['reputation_and_warrant'])
         payoff = Seller_prompt.PAYOFF_MATRIX.get(market_type, Seller_prompt.PAYOFF_MATRIX['reputation_and_warrant'])
         return actions, payoff
@@ -156,9 +156,9 @@ Make each seller distinct by varying:
 # ================== Buyer_prompt ==================
 
 class Buyer_prompt:
-    """买家相关的所有提示词和配置"""
+    """All buyer-related prompts and configurations"""
     
-    # 买家在不同市场下的可用动作描述
+    # Available action descriptions for buyers in different markets
     ACTIONS: dict[str, str] = {
         'reputation_only': (
             "1. `purchase_product_id(post_id: int)`\n"
@@ -171,7 +171,7 @@ class Buyer_prompt:
         ),
     }
     
-    # 买家在不同市场下的效用矩阵描述
+    # Utility matrix descriptions for buyers in different markets
     PAYOFF_MATRIX: dict[str, str] = {
         'reputation_only': (
             """
@@ -195,7 +195,7 @@ class Buyer_prompt:
         ).strip(),
     }
     
-    # 买家系统提示词模板（静态参数）
+    # Buyer system prompt template (static parameters)
     MASTER_PROMPT = TextPrompt("""
 # CONTEXT
 You are a Buyer Agent in a multi-round online marketplace simulation ('{market_type}' market). Your sole objective is to maximize your total utility over 7 rounds.
@@ -219,18 +219,18 @@ Your only goal is to make strategic decisions to maximize your cumulative utilit
 Based on all the information above, decide which product you should purchase to maximize your cumulative utility.(you should only purchase once!)
 """)
     
-    # 买家回合提示词模板（动态参数）
+    # Buyer round prompt template (dynamic parameters)
     ROUND_PROMPT = TextPrompt("""
 Please make your decision for this round.
 """)
     
     
-    # LLM 生成买家的系统提示词
+    # LLM generation system prompt for buyers
     GENERATION_SYS_PROMPT = """You are an expert in creating diverse buyer personas for a market simulation.
 Your task is to generate unique buyer characteristics that will lead to different purchasing behaviors in an online marketplace.
 Each buyer should have distinct backgrounds, professions, ages, interests, genders, and personal mottos, resulting in a wide variety of personalities and decision-making styles."""
     
-    # LLM 生成买家的用户提示词
+    # LLM generation user prompt for buyers
     GENERATION_USER_PROMPT = """Create a unique buyer persona for agent {0} in a market simulation.
 The buyer operates in an online marketplace where they can purchase products from sellers with different reputation levels and choose whether to buy warranted or unwarranted products.
 
@@ -252,7 +252,7 @@ Make each buyer distinct by varying:
     
     @staticmethod
     def get_actions_and_payoff(market_type: str) -> tuple[str, str]:
-        """基于 market_type 选择买家的 actions 与 payoff matrix。"""
+        """Select buyer actions and payoff matrix based on market_type."""
         actions = Buyer_prompt.ACTIONS.get(market_type, Buyer_prompt.ACTIONS['reputation_and_warrant'])
         payoff = Buyer_prompt.PAYOFF_MATRIX.get(market_type, Buyer_prompt.PAYOFF_MATRIX['reputation_and_warrant'])
         return actions, payoff
@@ -260,9 +260,9 @@ Make each buyer distinct by varying:
 # ================== Market Environment Prompts ==================
 
 class MarketEnv_prompt:
-    """市场环境相关的提示词，用于不同角色在不同环节观察环境信息"""
+    """Market environment-related prompts for different roles to observe environment information in different phases"""
     
-    # 卖家在 listing_product 阶段的环境观察
+    # Environment observation for sellers in listing_product phase
     SELLER_LISTING_ENV = TextPrompt("""
 # MARKET ENVIRONMENT OBSERVATION
 
@@ -281,7 +281,7 @@ class MarketEnv_prompt:
 Based on the feedback from previous rounds and current market conditions, decide what product to list this round.
 """)
     
-    # 买家在 purchase 阶段的环境观察
+    # Environment observation for buyers in purchase phase
     BUYER_PURCHASE_ENV = TextPrompt("""
 # MARKET ENVIRONMENT OBSERVATION
 
@@ -298,7 +298,7 @@ Based on the feedback from previous rounds and current market conditions, decide
 Based on the available products and seller information, decide which product to purchase.
 """)
     
-    # 买家在 rating 阶段的环境观察
+    # Environment observation for buyers in rating phase
     BUYER_RATING_ENV = TextPrompt("""
 # MARKET ENVIRONMENT OBSERVATION
 
@@ -320,15 +320,15 @@ Based on your purchase experience and the product details, decide how to rate th
     
 
 # ================== Backward Compatibility ==================
-# 为了保持向后兼容性，保留原有的变量名
+# Keep original variable names for backward compatibility
 
-# 市场配置
+# Market configuration
 MARKET_CONFIG = {
     'reputation_and_warrant': MARKET_RULES_A,
     'reputation_only': MARKET_RULES_B,
 }
 
-# 卖家相关变量
+# Seller-related variables
 SELLER_ACTIONS = Seller_prompt.ACTIONS
 SELLER_PAYOFF_MATRIX = Seller_prompt.PAYOFF_MATRIX
 SELLER_MASTER_PROMPT = Seller_prompt.MASTER_PROMPT
@@ -336,7 +336,7 @@ SELLER_ROUND_PROMPT = Seller_prompt.ROUND_PROMPT
 SELLER_GENERATION_SYS_PROMPT = Seller_prompt.GENERATION_SYS_PROMPT
 SELLER_GENERATION_USER_PROMPT = Seller_prompt.GENERATION_USER_PROMPT
 
-# 买家相关变量
+# Buyer-related variables
 BUYER_ACTIONS = Buyer_prompt.ACTIONS
 BUYER_PAYOFF_MATRIX = Buyer_prompt.PAYOFF_MATRIX
 BUYER_MASTER_PROMPT = Buyer_prompt.MASTER_PROMPT
@@ -344,18 +344,18 @@ BUYER_ROUND_PROMPT = Buyer_prompt.ROUND_PROMPT
 BUYER_GENERATION_SYS_PROMPT = Buyer_prompt.GENERATION_SYS_PROMPT
 BUYER_GENERATION_USER_PROMPT = Buyer_prompt.GENERATION_USER_PROMPT
 
-# 辅助函数
+# Helper functions
 def get_seller_actions_and_payoff(market_type: str) -> tuple[str, str]:
-    """基于 market_type 选择卖家的 actions 与 payoff matrix。"""
+    """Select seller actions and payoff matrix based on market_type."""
     return Seller_prompt.get_actions_and_payoff(market_type)
 
 def get_buyer_actions_and_payoff(market_type: str) -> tuple[str, str]:
-    """基于 market_type 选择买家的 actions 与 payoff matrix。"""
+    """Select buyer actions and payoff matrix based on market_type."""
     return Buyer_prompt.get_actions_and_payoff(market_type)
 
-# 历史记录格式化模板
+# History formatting template
 def format_seller_history(history_log: list) -> str:
-    """格式化卖家历史记录为字符串"""
+    """Format seller history log as string"""
     if not history_log:
         return "This is the first round. You have no past performance data."
     

@@ -73,10 +73,10 @@ class SocialAgent(ChatAgent):
         self.channel = channel or Channel()
         self.env = SocialEnvironment(SocialAction(agent_id, self.channel))
         
-        # Agent 状态属性
-        self.current_budget = 100.0  # 卖家初始预算
-        self.reputation_score = 0    # 卖家声誉
-        self.cumulative_utility = 0  # 买家累积效用
+        # Agent state attributes
+        self.current_budget = 100.0  # Seller initial budget
+        self.reputation_score = 0    # Seller reputation
+        self.cumulative_utility = 0  # Buyer cumulative utility
         self.history_summary = "This is the first round. You have no past performance data."
         if user_info_template is None:
             system_message_content = self.user_info.to_system_message()
@@ -126,23 +126,23 @@ class SocialAgent(ChatAgent):
 
     async def perform_market_action(self, extra_action: List[Union[FunctionTool, Callable]] = None, extra_prompt: str = None, current_round: int = 1, market_phase: str = "general"):
         """
-        执行市场模拟中的动作，包含环境观察和额外提示。
+        Execute market simulation actions, including environment observation and extra prompts.
         
         Args:
-            extra_action: 额外的工具列表
-            extra_prompt: 额外的提示信息
-            current_round: 当前回合数
-            market_phase: 市场阶段 ("listing", "purchase", "rating", "general")
+            extra_action: Additional tool list
+            extra_prompt: Additional prompt information
+            current_round: Current round number
+            market_phase: Market phase ("listing", "purchase", "rating", "general")
         """
         role = self.user_info.profile.get("other_info", {}).get("role")
 
-        # 根据市场阶段获取相应的环境观察
+        # Get corresponding environment observation based on market phase
         env_prompt = await self.env.to_text_prompt(agent=self, current_round=current_round, market_phase=market_phase)
         agent_log.info(
             f"Agent {self.social_agent_id} ({role}) observing environment in {market_phase} phase: "
             f"{env_prompt}")
 
-        # 构建用户消息内容：环境观察 + 额外提示
+        # Build user message content: environment observation + extra prompt
         if role == 'seller':
             base_content = (
                 "Based on your system instructions, which include your "
@@ -159,7 +159,7 @@ class SocialAgent(ChatAgent):
         else:
             base_content = ""
         
-        # 组合环境观察和额外提示
+        # Combine environment observation and extra prompt
         user_msg_content = f"{base_content}\n\n{env_prompt}"
         if extra_prompt:
             user_msg_content += f"\n\n## Additional Information:\n{extra_prompt}"
@@ -175,12 +175,12 @@ class SocialAgent(ChatAgent):
         try:
             response = await self.astep(user_msg)
             
-            #将 agent_id 注入到返回结果中
+            # Inject agent_id into return results
             if response.info and 'tool_calls' in response.info and response.info['tool_calls']:  
                 for tool_call in response.info['tool_calls']:
                     action_name = tool_call.tool_name
                     args = tool_call.args
-                    # 将 agent_id 添加到 platform 返回的结果字典中
+                    # Add agent_id to platform return result dictionary
                     if isinstance(tool_call.result, dict):
                         tool_call.result['agent_id'] = self.social_agent_id
                     agent_log.info(f"Agent {self.social_agent_id} performed "
@@ -201,7 +201,7 @@ class SocialAgent(ChatAgent):
 
     async def perform_action_by_llm(self, extra_action: List[Union[FunctionTool, Callable]] = None):
         """
-        原始的 perform_action_by_llm 函数，保持原有功能不变。
+        Original perform_action_by_llm function, keeping original functionality unchanged.
         """
         role = self.user_info.profile.get("other_info", {}).get("role")
 
@@ -238,12 +238,12 @@ class SocialAgent(ChatAgent):
         try:
             response = await self.astep(user_msg)
             
-            #将 agent_id 注入到返回结果中
+            # Inject agent_id into return results
             if response.info and 'tool_calls' in response.info and response.info['tool_calls']:  
                 for tool_call in response.info['tool_calls']:
                     action_name = tool_call.tool_name
                     args = tool_call.args
-                    # 将 agent_id 添加到 platform 返回的结果字典中
+                    # Add agent_id to platform return result dictionary
                     if isinstance(tool_call.result, dict):
                         tool_call.result['agent_id'] = self.social_agent_id
                     agent_log.info(f"Agent {self.social_agent_id} performed "

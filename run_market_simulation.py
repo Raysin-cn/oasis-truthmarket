@@ -226,14 +226,14 @@ async def main():
     
     # Merge agent graphs
     
-    # 添加卖家 agents
+    # Add seller agents
     for agent_id, agent in seller_agent_graph.get_agents():
         agent.user_info.profile["other_info"]["role"] = "seller"
         agent.user_info.market_type = MARKET_TYPE
         agent.env.is_market_sim = True
         agent_graph.add_agent(agent)
     
-    # 添加买家 agents (重新分配 agent_id)
+    # Add buyer agents (reassign agent_id)
     for agent_id, agent in buyer_agent_graph.get_agents():
         agent.user_info.profile["other_info"]["role"] = "buyer"
         agent.user_info.market_type = MARKET_TYPE
@@ -253,49 +253,49 @@ async def main():
     initialize_market_roles(agent_graph)
     sellers_history = {i: [] for i in range(NUM_SELLERS)}
     for round_num in range(1, SIMULATION_ROUNDS + 1):
-        # 同步平台回合计数器
+        # Synchronize platform round counter
         env.platform.sandbox_clock.round_step = round_num
         print(f"\n{'='*20} Starting Round {round_num}/{SIMULATION_ROUNDS} {'='*20}")
 
-        # 卖家退场机制：超过 EXIT_ROUND 的回合后允许退出（此处仅标注，具体执行可在平台侧实现）
+        # Seller exit mechanism: Allow exit after EXIT_ROUND (soft flag, actual implementation can be on platform side)
         if round_num > EXIT_ROUND:
             print("Sellers may exit market. (soft flag)")
         
-        # 卖家行动
+        # Seller actions
         print(f"\n--- [Round {round_num}] Seller Action Phase ---")
         seller_actions = {}
         
-        # 设置环境的市场阶段为 listing
+        # Set environment market phase to listing
         env.market_phase = "listing"
         
         for agent_id, agent in agent_graph.get_agents():
             if agent.user_info.profile.get("other_info", {}).get("role") == 'seller':
                 state = get_agent_state(agent_id, 'seller')
 
-                # 隐藏早期窗口内的完整历史（仅展示聚合/摘要或空）
+                # Hide complete history in initial window (show only aggregated/summary or empty)
                 history_log = sellers_history.get(agent_id, [])
                 if round_num in INITIAL_WINDOW_ROUNDS:
                     visible_history_string = "History hidden in initial window."
                 else:
                     visible_history_string = format_seller_history(history_log)
                 
-                # 更新环境状态
+                # Update environment state
                 env.current_round = round_num
                 
-                # 更新agent状态属性
+                # Update agent state attributes
                 agent.current_budget = state['current_budget']
                 agent.reputation_score = state['reputation_score']
                 agent.history_summary = visible_history_string
                 
-                # 系统Prompt已在SocialAgent实例化时设置（静态参数）
-                # 准备回合提示词（动态参数）
+                # System prompt already set during SocialAgent instantiation (static parameters)
+                # Prepare round prompt (dynamic parameters)
                 round_prompt = SELLER_ROUND_PROMPT.format(
                     history_summary=visible_history_string
                 )
-                # 卖家在 listing 阶段可用的工具
+                # Tools available for sellers in listing phase
                 listing_tools = [name_to_tool['list_product']] if 'list_product' in name_to_tool else []
                 
-                # 条件注入额外工具：在允许时机暴露退出/重返市场动作
+                # Conditionally inject additional tools: expose exit/re-enter market actions when allowed
                 if round_num >= EXIT_ROUND:
                     listing_tools.append(name_to_tool['exit_market'])
                 if round_num == REENTRY_ALLOWED_ROUND:
@@ -314,19 +314,19 @@ async def main():
         buyer_actions = {}
         product_listings_for_this_round = get_product_listings()
         
-        # 设置环境的市场阶段为 purchase
+        # Set environment market phase to purchase
         env.market_phase = "purchase"
 
         for agent_id, agent in agent_graph.get_agents():
              if agent.user_info.profile.get("other_info", {}).get("role") == 'buyer':
                 state = get_agent_state(agent_id, 'buyer')
-                # 更新agent状态属性
+                # Update agent state attributes
                 agent.cumulative_utility = state['cumulative_utility']
                 
-                # 系统Prompt已在SocialAgent实例化时设置（静态参数）
-                # 准备回合提示词（动态参数）
+                # System prompt already set during SocialAgent instantiation (static parameters)
+                # Prepare round prompt (dynamic parameters)
                 round_prompt = BUYER_ROUND_PROMPT.format()
-                # 买家在 purchase 阶段可用的工具：仅允许购买
+                # Tools available for buyers in purchase phase: only allow purchase
                 purchase_tools = [name_to_tool['purchase_product_id']] if 'purchase_product_id' in name_to_tool else []
                 buyer_actions[agent] = LLMAction(
                     extra_action=purchase_tools,
@@ -338,15 +338,15 @@ async def main():
             purchase_results = await env.step(buyer_actions)
         print("All purchase actions are attempted.")
 
-        # 卖家重返机制：REENTRY_ALLOWED_ROUND 之后，允许被标记操纵/低声誉者重新进入（此处留接口，实际控制可依赖 platform 层）
+        # Seller re-entry mechanism: After REENTRY_ALLOWED_ROUND, allow marked manipulators/low-reputation sellers to re-enter (interface left here, actual control can depend on platform layer)
         if round_num == REENTRY_ALLOWED_ROUND:
             print("Re-entry policy active for low-reputation/manipulators. (soft flag)")
 
-        # 挑战与评价 
+        # Challenge and rating 
         print(f"\n--- [Round {round_num}] Buyer Action Phase 2: Challenge & Rate ---")
         post_purchase_actions = {}
         
-        # 设置环境的市场阶段为 rating
+        # Set environment market phase to rating
         env.market_phase = "rating"
         
         successful_purchases = [res for res in purchase_results if res and res.get("success")]
@@ -358,13 +358,13 @@ async def main():
                 
                 agent = agent_graph.get_agent(agent_id)
 
-                # 买家在 rating 阶段可用的工具：仅允许挑战保证与评分
+                # Tools available for buyers in rating phase: only allow challenge warrant and rating
                 rating_tools = []
-                # rating_tools.append(name_to_tool['challenge_warrant'])  # 暂时禁用挑战功能
+                # rating_tools.append(name_to_tool['challenge_warrant'])  # Temporarily disable challenge function
                 if 'rate_transaction' in name_to_tool:
                     rating_tools.append(name_to_tool['rate_transaction'])
                 
-                # 将购买信息存储到agent中，供环境观察使用
+                # Store purchase information in agent for environment observation
                 agent.last_purchase_info = {
                     'transaction_id': purchase_info.get("transaction_id"),
                     'post_id': purchase_info.get("post_id"),
@@ -379,7 +379,7 @@ async def main():
                 
                 post_purchase_actions[agent] = LLMAction(
                     extra_action=rating_tools,
-                    extra_prompt=""  # 环境观察信息将通过 market_phase="rating" 提供
+                    extra_prompt=""  # Environment observation information will be provided through market_phase="rating"
                 )
         
         if post_purchase_actions:
@@ -388,20 +388,20 @@ async def main():
 
         clear_market()
         
-        # 打印回合统计信息
+        # Print round statistics
         print_round_statistics(round_num)
         
-        # 统计与记录：更新声誉历史（应用滞后显示：在回合 r 只公开到 r-REPUTATION_LAG 的评分）
+        # Statistics and recording: update reputation history (apply lag display: in round r only show ratings up to r-REPUTATION_LAG)
         ratings_cutoff_round = max(0, round_num - REPUTATION_LAG)
         with sqlite3.connect(DATABASE_PATH) as conn:
             compute_and_update_reputation(conn, round_num, ratings_up_to_round=ratings_cutoff_round if ratings_cutoff_round > 0 else None)
 
-        #  更新历史记录 
+        # Update history records 
         for seller_id in range(NUM_SELLERS):
             round_summary = get_seller_round_summary(seller_id, round_num)
             new_state = get_agent_state(seller_id, 'seller', round_num) 
 
-            # 获取该回合的实际收益
+            # Get actual profit for this round
             round_profit = new_state.get('round_profit', 0)
             total_profit = new_state.get('total_profit', 0)
 
@@ -417,7 +417,7 @@ async def main():
         print(f"\n{'='*20} End of Round {round_num} {'='*20}")
 
     
-    # 漏洞/操纵检测（整个模拟结束后一次性运行）
+    # Vulnerability/manipulation detection (run once after entire simulation)
     with sqlite3.connect(DATABASE_PATH) as conn:
         run_detection(SIMULATION_ROUNDS)
     print("Manipulation analysis completed.")
