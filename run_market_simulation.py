@@ -36,9 +36,9 @@ MARKET_TYPE = 'reputation_only'   #reputation_and_warrant or reputation_only
 def get_agent_state(agent_id: int, role: str, round_num: int = -1) -> dict:
     """Get the state of an agent at a specific round or current state."""
     if not os.path.exists(DATABASE_PATH):
-        # If seller, return initial budget and reputation
+        # If seller, return initial reputation
         if role == 'seller':
-            return {'current_budget': 100.0, 'reputation_score': 0, 'total_profit': 0}
+            return {'reputation_score': 0, 'total_profit': 0}
         # If buyer, return initial utility
         else:
             return {'cumulative_utility': 0, 'total_utility': 0}
@@ -51,13 +51,13 @@ def get_agent_state(agent_id: int, role: str, round_num: int = -1) -> dict:
         if role == 'seller':
             # Get seller basic information
             cursor.execute(
-                "SELECT budget, reputation_score, profit_utility_score FROM user WHERE user_id = ?",
+                "SELECT reputation_score, profit_utility_score FROM user WHERE user_id = ?",
                 (agent_id,)
             )
             result = cursor.fetchone()
-            state['current_budget'] = result[0] if result else 100.0
-            state['reputation_score'] = result[1] if result and result[1] is not None else 0
-            state['total_profit'] = result[2] if result and result[2] is not None else 0
+            state['reputation_score'] = result[0]
+            state['total_profit'] = result[1]
+            
             
             # Get sales information for this round
             if round_num > 0:
@@ -93,7 +93,7 @@ def get_agent_state(agent_id: int, role: str, round_num: int = -1) -> dict:
         print(f"Database query error (get_agent_state): {e}")
         # Return default values on error
         if role == 'seller':
-            state = {'current_budget': 100.0, 'reputation_score': 0, 'total_profit': 0}
+            state = {'reputation_score': 0, 'total_profit': 0}
         else:
             state = {'cumulative_utility': 0, 'total_utility': 0}
     finally:
@@ -171,10 +171,10 @@ def initialize_market_roles(agent_graph: AgentGraph):
         for agent_id, agent in agent_graph.get_agents():
             role = agent.user_info.profile.get("other_info", {}).get("role")
             if role == 'seller':
-                # Set initial budget and reputation for seller
+                # Set initial reputation for seller
                 cursor.execute(
-                    "UPDATE user SET role = ?, budget = ?, reputation_score = ?, profit_utility_score = ? WHERE agent_id = ?",
-                    ('seller', 100.0, 0, 0.0, agent_id) 
+                    "UPDATE user SET role = ?, reputation_score = ?, profit_utility_score = ? WHERE agent_id = ?",
+                    ('seller', 0, 0.0, agent_id) 
                 )
             elif role == 'buyer':
                 # Set role and initial score for buyer
@@ -244,7 +244,7 @@ async def main():
 
     print(f"Environment initialized. Database at '{DATABASE_PATH}'.")
     initialize_market_roles(agent_graph)
-    sellers_history = {i: [] for i in range(NUM_SELLERS)}
+    sellers_history = {i+1: [] for i in range(NUM_SELLERS)}
     for round_num in range(1, SIMULATION_ROUNDS + 1):
         # Synchronize platform round counter
         env.platform.sandbox_clock.round_step = round_num
@@ -276,7 +276,6 @@ async def main():
                 env.current_round = round_num
                 
                 # Update agent state attributes
-                agent.current_budget = state['current_budget']
                 agent.reputation_score = state['reputation_score']
                 agent.history_summary = visible_history_string
                 
@@ -386,40 +385,41 @@ async def main():
             compute_and_update_reputation(conn, round_num, ratings_up_to_round=ratings_cutoff_round)
 
         # Update history records 
-        for seller_id in range(NUM_SELLERS):
-            round_summary = get_seller_round_summary(seller_id, round_num)
-            new_state = get_agent_state(seller_id, 'seller', round_num) 
+        for agent_id, agent in agent_graph.get_agents():
+            if agent.user_info.profile.get("role") == 'seller':
+                round_summary = get_seller_round_summary(agent_id, round_num)
+                new_state = get_agent_state(agent_id, 'seller', round_num) 
 
-            # Get actual profit for this round
-            round_profit = new_state.get('round_profit', 0)
-            total_profit = new_state.get('total_profit', 0)
+                # Get actual profit for this round
+                round_profit = new_state.get('round_profit', 0)
+                total_profit = new_state.get('total_profit', 0)
 
-            # Calculate reputation that will be shown in the NEXT round (include current round ratings)
-            next_round_cutoff = max(0, round_num + 1 - REPUTATION_LAG)
-            with sqlite3.connect(DATABASE_PATH) as conn:
-                cursor = conn.cursor()
-                cursor.execute(
-                    """
-                    SELECT COUNT(t.rating) as cnt, COALESCE(SUM(t.rating), 0)
-                    FROM transactions t
-                    WHERE t.rating IS NOT NULL AND t.round_number <= ? AND t.seller_id = ?
-                    """,
-                    (next_round_cutoff, seller_id),
-                )
-                result = cursor.fetchone()
-                if result and result[0] > 0:
-                    next_round_reputation = round(result[1] / result[0])
-                else:
-                    next_round_reputation = 0
+                # Calculate reputation that will be shown in the NEXT round (include current round ratings)
+                next_round_cutoff = max(0, round_num + 1 - REPUTATION_LAG)
+                with sqlite3.connect(DATABASE_PATH) as conn:
+                    cursor = conn.cursor()
+                    cursor.execute(
+                        """
+                        SELECT COUNT(t.rating) as cnt, COALESCE(SUM(t.rating), 0)
+                        FROM transactions t
+                        WHERE t.rating IS NOT NULL AND t.round_number <= ? AND t.seller_id = ?
+                        """,
+                        (next_round_cutoff, agent_id),
+                    )
+                    result = cursor.fetchone()
+                    if result and result[0] > 0:
+                        next_round_reputation = round(result[1] / result[0])
+                    else:
+                        next_round_reputation = 0
 
-            sellers_history[seller_id].append({
-                "round": round_num,
-                "quality": round_summary["quality"], 
-                "sold": round_summary["sold"], 
-                "profit": round_profit,
-                "reputation": next_round_reputation,  # Use reputation that will be shown next round
-                "total_profit": total_profit
-            })
+                sellers_history[agent_id].append({
+                    "round": round_num,
+                    "quality": round_summary["quality"], 
+                    "sold": round_summary["sold"], 
+                    "profit": round_profit,
+                    "reputation": next_round_reputation,  # Use reputation that will be shown next round
+                    "total_profit": total_profit
+                })
 
         print(f"\n{'='*20} End of Round {round_num} {'='*20}")
 

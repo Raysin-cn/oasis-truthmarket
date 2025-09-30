@@ -96,7 +96,7 @@ def compute_and_update_reputation(conn: sqlite3.Connection, round_number: int, r
     for seller_id in seller_ids:
         num_ratings, sum_ratings = aggregated.get(seller_id, (0, 0))
         if num_ratings > 0:
-            avg_rating = round(sum_ratings / num_ratings)
+            avg_rating = round(sum_ratings)
         else:
             # Default initial reputation
             avg_rating = 0

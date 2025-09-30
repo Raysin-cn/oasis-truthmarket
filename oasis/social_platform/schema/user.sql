@@ -10,8 +10,7 @@ CREATE TABLE user (
     num_followers INTEGER DEFAULT 0,
     -- Extensions based on Design Proposal
     role VARCHAR(10),
-    budget DECIMAL(10, 2),
-    reputation_score INTEGER,
-    profit_utility_score DECIMAL(10, 2),
+    reputation_score INTEGER DEFAULT 0,
+    profit_utility_score DECIMAL(10, 2) DEFAULT 0.0,
     market_id VARCHAR(10)
 );
