@@ -211,3 +211,4 @@ __marimo__/
 *.db
 .temp
 *.png
+.vscode/
