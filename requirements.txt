@@ -1,0 +1,12 @@
+# Core dependencies for oasis-truthmarket simulation
+camel-ai==0.2.75
+openai==1.109.1
+pydantic==2.11.9
+pydantic-core==2.33.2
+pydantic-settings==2.11.0
+tiktoken==0.7.0
+
+# Additional dependencies
+httpx>=0.28.0
+pillow>=10.1.0
+psutil>=5.9.8
