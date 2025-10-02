@@ -762,7 +762,7 @@ class SocialAction:
         return await self.perform_action(self.agent_id,
                                          ActionType.LISTEN_FROM_GROUP.value)
 
-    async def list_product(self, advertised_quality: str, product_quality: str, has_warrant: bool):
+    async def list_product(self, advertised_quality: str, product_quality: str, has_warrant: bool = False):
         """
         Lists a product for sale in the market for the current round.
 

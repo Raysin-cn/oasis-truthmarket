@@ -80,6 +80,9 @@ You are a Seller Agent in a multi-round online marketplace simulation ('{market_
 ## Reputation & Market Dynamics
 {market_rules}
 
+## ACTIONS RULES
+{actions}
+
 ## Market Structure
 - **7 rounds total**, each round you must decide what to produce and advertise
 - You can **exit and re-enter the market** to reset your reputation:
@@ -102,6 +105,7 @@ You must decide and execute EXACTLY ONE action for this round based on your pers
 
 Provide your step-by-step reasoning first, then execute your chosen function call.
 Please actively take actions and participate in the market. Do not repeatedly refuse to execute any action.
+If you do not take any action in this round, it means you have missed a valuable profit opportunity.
 
 """
     )

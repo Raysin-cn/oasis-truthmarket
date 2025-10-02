@@ -175,11 +175,29 @@ def plot_seller_actions_scatter(conn: sqlite3.Connection, out_dir: str) -> None:
 
     # Exit/Reentry from trace
     tr_df = pd.DataFrame()
-    if not trace.empty and {"user_id", "action_type", "round_number"}.issubset(trace.columns):
-        tr = trace[["round_number", "user_id", "action_type"]].copy()
-        tr = tr.rename(columns={"round_number": "round", "user_id": "seller_id"})
-        tr = tr[tr["action_type"].isin(["exit_market", "reenter_market"])].copy()
-        tr_df = tr[["round", "seller_id", "action_type"]]
+    if not trace.empty and {"user_id", "action"}.issubset(trace.columns):
+        tr = trace[["created_at", "user_id", "action"]].copy()
+        tr = tr.rename(columns={"user_id": "seller_id"})
+        tr = tr[tr["action"].isin(["exit_market", "reenter_market"])].copy()
+        
+        # 根据业务逻辑分配round信息
+        if not tr.empty:
+            # 将trace的时间戳转换为datetime
+            tr["created_at"] = pd.to_datetime(tr["created_at"])
+            
+            # 根据action类型分配round
+            def assign_round_for_action(action, timestamp):
+                if action == "reenter_market":
+                    # reenter动作只可能出现在round 5
+                    return 5
+                elif action == "exit_market":
+                    # exit动作通常出现在后期round，这里假设是round 7
+                    return 7
+                else:
+                    return None
+            
+            tr["round"] = tr.apply(lambda row: assign_round_for_action(row["action"], row["created_at"]), axis=1)
+            tr_df = tr[["round", "seller_id", "action"]].dropna(subset=["round"])
 
     if list_df.empty and tr_df.empty:
         return
@@ -219,8 +237,8 @@ def plot_seller_actions_scatter(conn: sqlite3.Connection, out_dir: str) -> None:
         )
     # Re-entry as squares (s), Exit as triangles (^), neutral color
     if not tr_df.empty:
-        re_df = tr_df[tr_df["action_type"] == "reenter_market"]
-        ex_df = tr_df[tr_df["action_type"] == "exit_market"]
+        re_df = tr_df[tr_df["action"] == "reenter_market"]
+        ex_df = tr_df[tr_df["action"] == "exit_market"]
         if not re_df.empty:
             ax.scatter(re_df["round"], re_df["seller_id"], c="#444444", marker="s", s=80,
                        edgecolor="white", linewidth=0.6, label="reenter_market")

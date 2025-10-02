@@ -20,8 +20,8 @@ load_dotenv(override=True)
 # Experiment configuration
 
 TOTAL_AGENTS = 6
-NUM_SELLERS = 3
-NUM_BUYERS = 3
+NUM_SELLERS = 10
+NUM_BUYERS = 10
 SIMULATION_ROUNDS = 7
 DATABASE_PATH = 'market_sim.db'
 os.environ.setdefault('MARKET_DB_PATH', DATABASE_PATH)
@@ -168,22 +168,41 @@ def initialize_market_roles(agent_graph: AgentGraph):
     conn = sqlite3.connect(DATABASE_PATH)
     cursor = conn.cursor()
     try:
+        # 获取所有agent的信息
+        agents_info = []
         for agent_id, agent in agent_graph.get_agents():
             role = agent.user_info.profile.get("other_info", {}).get("role")
-            if role == 'seller':
-                # Set initial reputation for seller
-                cursor.execute(
-                    "UPDATE user SET role = ?, reputation_score = ?, profit_utility_score = ? WHERE agent_id = ?",
-                    ('seller', 0, 0.0, agent_id) 
-                )
-            elif role == 'buyer':
-                # Set role and initial score for buyer
-                cursor.execute(
-                    "UPDATE user SET role = ?, profit_utility_score = ? WHERE agent_id = ?",
-                    ('buyer', 0.0, agent_id)
-                )
+            agents_info.append((agent_id, role))
+        
+        print(f"Found {len(agents_info)} agents to initialize")
+        
+        # 设置seller角色（前NUM_SELLERS个agent）
+        for i in range(NUM_SELLERS):
+            agent_id = i + 1
+            cursor.execute(
+                "UPDATE user SET role = ?, reputation_score = ?, profit_utility_score = ? WHERE agent_id = ?",
+                ('seller', 0, 0.0, agent_id) 
+            )
+            print(f"Set agent {agent_id} as seller")
+        
+        # 设置buyer角色（接下来的NUM_BUYERS个agent）
+        for i in range(NUM_BUYERS):
+            agent_id = NUM_SELLERS + i + 1
+            cursor.execute(
+                "UPDATE user SET role = ?, profit_utility_score = ? WHERE agent_id = ?",
+                ('buyer', 0.0, agent_id)
+            )
+            print(f"Set agent {agent_id} as buyer")
+        
         conn.commit()
-        print("Market roles initialized successfully.")
+        
+        # 验证设置结果
+        cursor.execute("SELECT COUNT(*) FROM user WHERE role = 'seller'")
+        seller_count = cursor.fetchone()[0]
+        cursor.execute("SELECT COUNT(*) FROM user WHERE role = 'buyer'")
+        buyer_count = cursor.fetchone()[0]
+        
+        print(f"Market roles initialized successfully: {seller_count} sellers, {buyer_count} buyers")
     except sqlite3.Error as e:
         print(f"Database error (initialize_market_roles): {e}")
     finally:

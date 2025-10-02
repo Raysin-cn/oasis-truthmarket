@@ -1880,7 +1880,7 @@ class Platform:
             # 按模拟语义：重置负声誉为 0（或直接设置为非负基线）
             reset_needed = True if not message else message.get("reset_reputation", True)
             if reset_needed:
-                update_query = "UPDATE user SET reputation_score = CASE WHEN reputation_score < 0 THEN 0 ELSE reputation_score END WHERE user_id = ?"
+                update_query = "UPDATE user SET reputation_score = 0 WHERE user_id = ?"
                 self.pl_utils._execute_db_command(update_query, (seller_id,), commit=True)
 
             self.pl_utils._record_trace(seller_id, ActionType.REENTER_MARKET.value, message or {}, current_time)

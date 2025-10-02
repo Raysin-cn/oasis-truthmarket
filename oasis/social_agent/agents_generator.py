@@ -722,6 +722,7 @@ async def generate_agent_from_LLM(agents_num:int,
             "role": role,
             "market_type": market_type, 
             "market_rules": get_prompt_child(role, "MARKET_RULES", market_type),  
+            "actions": get_prompt_child(role, "ACTIONS", market_type),
             "payoff_matrix": get_prompt_child(role, "PAYOFF_MATRIX", market_type),  
         }
 
