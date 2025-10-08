@@ -16,6 +16,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
 from matplotlib.patches import Rectangle
+import sys
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from config import SimulationConfig
 from analyze_market import read_table, ensure_output_dir, plot_save
@@ -182,43 +184,43 @@ class MultiRunAnalyzer:
         
         # 创建图表
         fig, axes = plt.subplots(2, 2, figsize=(12, 10))
-        fig.suptitle(f'跨运行对比分析 - 实验 {self.experiment_id}', fontsize=14)
+        fig.suptitle(f'Cross-Run Comparison Analysis - Experiment {self.experiment_id}', fontsize=14)
         
         # 1. 卖家总利润对比
         axes[0, 0].bar(run_ids, seller_profits, alpha=0.7, color='skyblue')
         axes[0, 0].axhline(y=np.mean(seller_profits), color='red', linestyle='--', 
-                          label=f'平均: {np.mean(seller_profits):.2f}')
-        axes[0, 0].set_title('卖家总利润')
-        axes[0, 0].set_xlabel('运行ID')
-        axes[0, 0].set_ylabel('总利润')
+                          label=f'Mean: {np.mean(seller_profits):.2f}')
+        axes[0, 0].set_title('Total Seller Profits')
+        axes[0, 0].set_xlabel('Run ID')
+        axes[0, 0].set_ylabel('Total Profit')
         axes[0, 0].legend()
         axes[0, 0].grid(True, alpha=0.3)
         
         # 2. 买家总效用对比
         axes[0, 1].bar(run_ids, buyer_utilities, alpha=0.7, color='lightgreen')
         axes[0, 1].axhline(y=np.mean(buyer_utilities), color='red', linestyle='--',
-                          label=f'平均: {np.mean(buyer_utilities):.2f}')
-        axes[0, 1].set_title('买家总效用')
-        axes[0, 1].set_xlabel('运行ID')
-        axes[0, 1].set_ylabel('总效用')
+                          label=f'Mean: {np.mean(buyer_utilities):.2f}')
+        axes[0, 1].set_title('Total Buyer Utilities')
+        axes[0, 1].set_xlabel('Run ID')
+        axes[0, 1].set_ylabel('Total Utility')
         axes[0, 1].legend()
         axes[0, 1].grid(True, alpha=0.3)
         
         # 3. 交易次数对比
         axes[1, 0].bar(run_ids, transaction_counts, alpha=0.7, color='orange')
         axes[1, 0].axhline(y=np.mean(transaction_counts), color='red', linestyle='--',
-                          label=f'平均: {np.mean(transaction_counts):.1f}')
-        axes[1, 0].set_title('交易次数')
-        axes[1, 0].set_xlabel('运行ID')
-        axes[1, 0].set_ylabel('交易次数')
+                          label=f'Mean: {np.mean(transaction_counts):.1f}')
+        axes[1, 0].set_title('Transaction Counts')
+        axes[1, 0].set_xlabel('Run ID')
+        axes[1, 0].set_ylabel('Number of Transactions')
         axes[1, 0].legend()
         axes[1, 0].grid(True, alpha=0.3)
         
         # 4. 利润vs效用散点图
         axes[1, 1].scatter(seller_profits, buyer_utilities, alpha=0.7, s=60)
-        axes[1, 1].set_title('卖家利润 vs 买家效用')
-        axes[1, 1].set_xlabel('卖家总利润')
-        axes[1, 1].set_ylabel('买家总效用')
+        axes[1, 1].set_title('Seller Profits vs Buyer Utilities')
+        axes[1, 1].set_xlabel('Total Seller Profit')
+        axes[1, 1].set_ylabel('Total Buyer Utility')
         axes[1, 1].grid(True, alpha=0.3)
         
         # 添加运行ID标签
@@ -246,30 +248,30 @@ class MultiRunAnalyzer:
         
         # 创建图表
         fig, axes = plt.subplots(1, 3, figsize=(15, 5))
-        fig.suptitle(f'轮次进展分析 - 实验 {self.experiment_id}', fontsize=14)
+        fig.suptitle(f'Round Progression Analysis - Experiment {self.experiment_id}', fontsize=14)
         
         # 1. 卖家利润进展
         axes[0].errorbar(rounds, avg_seller_profits, yerr=std_seller_profits, 
                         fmt='-o', capsize=5, linewidth=2, markersize=6)
-        axes[0].set_title('卖家利润进展')
-        axes[0].set_xlabel('轮次')
-        axes[0].set_ylabel('平均利润 ± 标准差')
+        axes[0].set_title('Seller Profit Progression')
+        axes[0].set_xlabel('Round')
+        axes[0].set_ylabel('Average Profit ± Std Dev')
         axes[0].grid(True, alpha=0.3)
         
         # 2. 买家效用进展
         axes[1].errorbar(rounds, avg_buyer_utilities, yerr=std_buyer_utilities,
                         fmt='-o', capsize=5, linewidth=2, markersize=6, color='green')
-        axes[1].set_title('买家效用进展')
-        axes[1].set_xlabel('轮次')
-        axes[1].set_ylabel('平均效用 ± 标准差')
+        axes[1].set_title('Buyer Utility Progression')
+        axes[1].set_xlabel('Round')
+        axes[1].set_ylabel('Average Utility ± Std Dev')
         axes[1].grid(True, alpha=0.3)
         
         # 3. 交易活跃度进展
         axes[2].errorbar(rounds, avg_transactions, yerr=std_transactions,
                         fmt='-o', capsize=5, linewidth=2, markersize=6, color='orange')
-        axes[2].set_title('交易活跃度进展')
-        axes[2].set_xlabel('轮次')
-        axes[2].set_ylabel('平均交易次数 ± 标准差')
+        axes[2].set_title('Transaction Activity Progression')
+        axes[2].set_xlabel('Round')
+        axes[2].set_ylabel('Average Transactions ± Std Dev')
         axes[2].grid(True, alpha=0.3)
         
         plot_save(fig, out_dir, 'round_progression')
@@ -296,53 +298,53 @@ class MultiRunAnalyzer:
         
         # 创建图表
         fig, axes = plt.subplots(2, 3, figsize=(15, 10))
-        fig.suptitle(f'分布分析 - 实验 {self.experiment_id}', fontsize=14)
+        fig.suptitle(f'Distribution Analysis - Experiment {self.experiment_id}', fontsize=14)
         
         # 第一行：直方图
         # 卖家利润分布
         axes[0, 0].hist(all_seller_profits, bins=10, alpha=0.7, color='skyblue', edgecolor='black')
         axes[0, 0].axvline(np.mean(all_seller_profits), color='red', linestyle='--', 
-                          label=f'均值: {np.mean(all_seller_profits):.2f}')
-        axes[0, 0].set_title('卖家总利润分布')
-        axes[0, 0].set_xlabel('总利润')
-        axes[0, 0].set_ylabel('频次')
+                          label=f'Mean: {np.mean(all_seller_profits):.2f}')
+        axes[0, 0].set_title('Total Seller Profits Distribution')
+        axes[0, 0].set_xlabel('Total Profit')
+        axes[0, 0].set_ylabel('Frequency')
         axes[0, 0].legend()
         axes[0, 0].grid(True, alpha=0.3)
         
         # 买家效用分布
         axes[0, 1].hist(all_buyer_utilities, bins=10, alpha=0.7, color='lightgreen', edgecolor='black')
         axes[0, 1].axvline(np.mean(all_buyer_utilities), color='red', linestyle='--',
-                          label=f'均值: {np.mean(all_buyer_utilities):.2f}')
-        axes[0, 1].set_title('买家总效用分布')
-        axes[0, 1].set_xlabel('总效用')
-        axes[0, 1].set_ylabel('频次')
+                          label=f'Mean: {np.mean(all_buyer_utilities):.2f}')
+        axes[0, 1].set_title('Total Buyer Utilities Distribution')
+        axes[0, 1].set_xlabel('Total Utility')
+        axes[0, 1].set_ylabel('Frequency')
         axes[0, 1].legend()
         axes[0, 1].grid(True, alpha=0.3)
         
         # 交易次数分布
         axes[0, 2].hist(all_transaction_counts, bins=10, alpha=0.7, color='orange', edgecolor='black')
         axes[0, 2].axvline(np.mean(all_transaction_counts), color='red', linestyle='--',
-                          label=f'均值: {np.mean(all_transaction_counts):.1f}')
-        axes[0, 2].set_title('交易次数分布')
-        axes[0, 2].set_xlabel('交易次数')
-        axes[0, 2].set_ylabel('频次')
+                          label=f'Mean: {np.mean(all_transaction_counts):.1f}')
+        axes[0, 2].set_title('Transaction Counts Distribution')
+        axes[0, 2].set_xlabel('Number of Transactions')
+        axes[0, 2].set_ylabel('Frequency')
         axes[0, 2].legend()
         axes[0, 2].grid(True, alpha=0.3)
         
         # 第二行：箱线图
-        axes[1, 0].boxplot(all_seller_profits, labels=['卖家利润'])
-        axes[1, 0].set_title('卖家利润箱线图')
-        axes[1, 0].set_ylabel('总利润')
+        axes[1, 0].boxplot(all_seller_profits, labels=['Seller Profits'])
+        axes[1, 0].set_title('Seller Profits Box Plot')
+        axes[1, 0].set_ylabel('Total Profit')
         axes[1, 0].grid(True, alpha=0.3)
         
-        axes[1, 1].boxplot(all_buyer_utilities, labels=['买家效用'])
-        axes[1, 1].set_title('买家效用箱线图')
-        axes[1, 1].set_ylabel('总效用')
+        axes[1, 1].boxplot(all_buyer_utilities, labels=['Buyer Utilities'])
+        axes[1, 1].set_title('Buyer Utilities Box Plot')
+        axes[1, 1].set_ylabel('Total Utility')
         axes[1, 1].grid(True, alpha=0.3)
         
-        axes[1, 2].boxplot(all_transaction_counts, labels=['交易次数'])
-        axes[1, 2].set_title('交易次数箱线图')
-        axes[1, 2].set_ylabel('交易次数')
+        axes[1, 2].boxplot(all_transaction_counts, labels=['Transaction Counts'])
+        axes[1, 2].set_title('Transaction Counts Box Plot')
+        axes[1, 2].set_ylabel('Number of Transactions')
         axes[1, 2].grid(True, alpha=0.3)
         
         plot_save(fig, out_dir, 'distribution_analysis')
@@ -430,7 +432,7 @@ def main():
     """命令行入口点"""
     import argparse
     parser = argparse.ArgumentParser(description='分析多次运行实验结果')
-    parser.add_argument('experiment_id', help='实验ID')
+    parser.add_argument('--experiment_id', help='实验ID', default='experiment_20251008_104645')
     args = parser.parse_args()
     
     asyncio.run(analyze_experiment(args.experiment_id))
