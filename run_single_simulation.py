@@ -1,3 +1,8 @@
+"""
+单次市场仿真运行模块
+从run_market_simulation.py中提取的核心仿真逻辑
+"""
+
 import asyncio
 import sqlite3
 import os
@@ -12,30 +17,18 @@ from prompt import format_seller_history, SELLER_GENERATION_SYS_PROMPT, SELLER_G
 from utils import print_round_statistics, clear_market, print_simulation_summary
 from oasis.environment.processing.reputation import compute_and_update_reputation
 from oasis.environment.processing.valunerability import run_detection
+from config import SimulationConfig
 
 from dotenv import load_dotenv
 load_dotenv(override=True)
 
 
-# Experiment configuration
-
-TOTAL_AGENTS = 6
-NUM_SELLERS = 10
-NUM_BUYERS = 10
-SIMULATION_ROUNDS = 7
-DATABASE_PATH = 'market_sim.db'
-os.environ.setdefault('MARKET_DB_PATH', DATABASE_PATH)
-
-# Hyperparameters (based on proposals)
-REPUTATION_LAG = 1  # ratings from round t available to public at t+REPUTATION_LAG
-REENTRY_ALLOWED_ROUND = 5
-INITIAL_WINDOW_ROUNDS = [1, 2]  # rounds to hide full history
-EXIT_ROUND = 7  # after round 7 sellers may exit
-MARKET_TYPE = 'reputation_only'   #reputation_and_warrant or reputation_only
-
-def get_agent_state(agent_id: int, role: str, round_num: int = -1) -> dict:
+def get_agent_state(agent_id: int, role: str, round_num: int = -1, database_path: str = None) -> dict:
     """Get the state of an agent at a specific round or current state."""
-    if not os.path.exists(DATABASE_PATH):
+    if database_path is None:
+        database_path = os.environ.get('MARKET_DB_PATH', 'market_sim.db')
+    
+    if not os.path.exists(database_path):
         # If seller, return initial reputation
         if role == 'seller':
             return {'reputation_score': 0, 'total_profit': 0}
@@ -43,7 +36,7 @@ def get_agent_state(agent_id: int, role: str, round_num: int = -1) -> dict:
         else:
             return {'cumulative_utility': 0, 'total_utility': 0}
 
-    conn = sqlite3.connect(DATABASE_PATH)
+    conn = sqlite3.connect(database_path)
     cursor = conn.cursor()
     
     state = {}
@@ -55,9 +48,8 @@ def get_agent_state(agent_id: int, role: str, round_num: int = -1) -> dict:
                 (agent_id,)
             )
             result = cursor.fetchone()
-            state['reputation_score'] = result[0]
-            state['total_profit'] = result[1]
-            
+            state['reputation_score'] = result[0] if result else 0
+            state['total_profit'] = result[1] if result else 0
             
             # Get sales information for this round
             if round_num > 0:
@@ -101,10 +93,16 @@ def get_agent_state(agent_id: int, role: str, round_num: int = -1) -> dict:
         
     return state
 
-def get_product_listings() -> str:
-    if not os.path.exists(DATABASE_PATH):
+
+def get_product_listings(database_path: str = None) -> str:
+    """Get current product listings."""
+    if database_path is None:
+        database_path = os.environ.get('MARKET_DB_PATH', 'market_sim.db')
+    
+    if not os.path.exists(database_path):
         return "No products are currently on sale."
-    conn = sqlite3.connect(DATABASE_PATH)
+    
+    conn = sqlite3.connect(database_path)
     cursor = conn.cursor()
     listings = "No products are currently on sale."
     try:
@@ -136,13 +134,17 @@ def get_product_listings() -> str:
         conn.close()
     return listings
 
-def get_seller_round_summary(seller_id: int, round_num: int) -> dict:
+
+def get_seller_round_summary(seller_id: int, round_num: int, database_path: str = None) -> dict:
     """Get seller's product listing information and sales status for a specific round."""
+    if database_path is None:
+        database_path = os.environ.get('MARKET_DB_PATH', 'market_sim.db')
+    
     summary = {"quality": "Did not list", "sold": "No", "price": 0}
-    if not os.path.exists(DATABASE_PATH):
+    if not os.path.exists(database_path):
         return summary
         
-    conn = sqlite3.connect(DATABASE_PATH)
+    conn = sqlite3.connect(database_path)
     cursor = conn.cursor()
     try:
         # Query in post table by user_id and round_number
@@ -162,10 +164,13 @@ def get_seller_round_summary(seller_id: int, round_num: int) -> dict:
     return summary
 
 
-def initialize_market_roles(agent_graph: AgentGraph):
+def initialize_market_roles(agent_graph: AgentGraph, database_path: str = None):
     """Set roles and initial states for all agents in the database."""
+    if database_path is None:
+        database_path = os.environ.get('MARKET_DB_PATH', 'market_sim.db')
+    
     print("Initializing market roles in the database...")
-    conn = sqlite3.connect(DATABASE_PATH)
+    conn = sqlite3.connect(database_path)
     cursor = conn.cursor()
     try:
         # 获取所有agent的信息
@@ -177,7 +182,7 @@ def initialize_market_roles(agent_graph: AgentGraph):
         print(f"Found {len(agents_info)} agents to initialize")
         
         # 设置seller角色（前NUM_SELLERS个agent）
-        for i in range(NUM_SELLERS):
+        for i in range(SimulationConfig.NUM_SELLERS):
             agent_id = i + 1
             cursor.execute(
                 "UPDATE user SET role = ?, reputation_score = ?, profit_utility_score = ? WHERE agent_id = ?",
@@ -186,8 +191,8 @@ def initialize_market_roles(agent_graph: AgentGraph):
             print(f"Set agent {agent_id} as seller")
         
         # 设置buyer角色（接下来的NUM_BUYERS个agent）
-        for i in range(NUM_BUYERS):
-            agent_id = NUM_SELLERS + i + 1
+        for i in range(SimulationConfig.NUM_BUYERS):
+            agent_id = SimulationConfig.NUM_SELLERS + i + 1
             cursor.execute(
                 "UPDATE user SET role = ?, profit_utility_score = ? WHERE agent_id = ?",
                 ('buyer', 0.0, agent_id)
@@ -207,12 +212,22 @@ def initialize_market_roles(agent_graph: AgentGraph):
         print(f"Database error (initialize_market_roles): {e}")
     finally:
         conn.close()
-                
-async def main():
+
+
+async def run_single_simulation(database_path: str):
+    """运行单次市场仿真
+    
+    Args:
+        database_path: 数据库文件路径
+    """
     print("Starting market simulation initialization...")
     
-    if os.path.exists(DATABASE_PATH):
-        os.remove(DATABASE_PATH)
+    # 设置环境变量
+    os.environ['MARKET_DB_PATH'] = database_path
+    
+    # 清理已存在的数据库
+    if os.path.exists(database_path):
+        os.remove(database_path)
     
     model = ModelFactory.create(
         model_platform=ModelPlatformType.OPENAI,
@@ -222,27 +237,25 @@ async def main():
     )
     agent_graph = AgentGraph()
 
-
     # Generate seller agents
     print("Generating seller agents...")
     seller_agent_graph = await generate_agent_from_LLM(
-        agents_num=NUM_SELLERS,
+        agents_num=SimulationConfig.NUM_SELLERS,
         sys_prompt=SELLER_GENERATION_SYS_PROMPT,
         user_prompt=SELLER_GENERATION_USER_PROMPT,
-        market_type = MARKET_TYPE,
+        market_type=SimulationConfig.MARKET_TYPE,
         role="seller",
     )
     
     # Generate buyer agents
     print("Generating buyer agents...")
     buyer_agent_graph = await generate_agent_from_LLM(
-        agents_num=NUM_BUYERS,
+        agents_num=SimulationConfig.NUM_BUYERS,
         sys_prompt=BUYER_GENERATION_SYS_PROMPT,
         user_prompt=BUYER_GENERATION_USER_PROMPT,
-        market_type = MARKET_TYPE,
+        market_type=SimulationConfig.MARKET_TYPE,
         role="buyer"
     )
-    
     
     # Add seller agents
     for agent_id, agent in seller_agent_graph.get_agents():
@@ -257,20 +270,21 @@ async def main():
     env = make(
         agent_graph=agent_graph,
         platform=oasis.DefaultPlatformType.REDDIT, 
-        database_path=DATABASE_PATH
+        database_path=database_path
     )
     await env.reset()
 
-    print(f"Environment initialized. Database at '{DATABASE_PATH}'.")
-    initialize_market_roles(agent_graph)
-    sellers_history = {i+1: [] for i in range(NUM_SELLERS)}
-    for round_num in range(1, SIMULATION_ROUNDS + 1):
+    print(f"Environment initialized. Database at '{database_path}'.")
+    initialize_market_roles(agent_graph, database_path)
+    sellers_history = {i+1: [] for i in range(SimulationConfig.NUM_SELLERS)}
+    
+    for round_num in range(1, SimulationConfig.SIMULATION_ROUNDS + 1):
         # Synchronize platform round counter
         env.platform.sandbox_clock.round_step = round_num
-        print(f"\n{'='*20} Starting Round {round_num}/{SIMULATION_ROUNDS} {'='*20}")
+        print(f"\n{'='*20} Starting Round {round_num}/{SimulationConfig.SIMULATION_ROUNDS} {'='*20}")
 
         # Seller exit mechanism: Allow exit after EXIT_ROUND (soft flag, actual implementation can be on platform side)
-        if round_num > EXIT_ROUND:
+        if round_num > SimulationConfig.EXIT_ROUND:
             print("Sellers may exit market. (soft flag)")
         
         # Seller actions
@@ -282,11 +296,11 @@ async def main():
         
         for agent_id, agent in agent_graph.get_agents():
             if agent.user_info.profile.get("role") == 'seller':
-                state = get_agent_state(agent_id, 'seller')
+                state = get_agent_state(agent_id, 'seller', database_path=database_path)
 
                 # Hide complete history in initial window (show only aggregated/summary or empty)
                 history_log = sellers_history.get(agent_id, [])
-                if round_num in INITIAL_WINDOW_ROUNDS:
+                if round_num in SimulationConfig.INITIAL_WINDOW_ROUNDS:
                     visible_history_string = "History hidden in initial window."
                 else:
                     visible_history_string = format_seller_history(history_log)
@@ -307,9 +321,9 @@ async def main():
                 listing_tools = ['list_product']
                 
                 # Conditionally inject additional tools: expose exit/re-enter market actions when allowed
-                if round_num >= EXIT_ROUND:
+                if round_num >= SimulationConfig.EXIT_ROUND:
                     listing_tools.append('exit_market')
-                if round_num == REENTRY_ALLOWED_ROUND:
+                if round_num == SimulationConfig.REENTRY_ALLOWED_ROUND:
                     listing_tools.append('reenter_market')
 
                 seller_actions[agent] = LLMAction(
@@ -329,7 +343,7 @@ async def main():
 
         for agent_id, agent in agent_graph.get_agents():
              if agent.user_info.profile.get("role") == 'buyer':
-                state = get_agent_state(agent_id, 'buyer')
+                state = get_agent_state(agent_id, 'buyer', database_path=database_path)
                 # Update agent state attributes
                 agent.cumulative_utility = state['cumulative_utility']
                 
@@ -349,7 +363,7 @@ async def main():
         print("All purchase actions are attempted.")
 
         # Seller re-entry mechanism: After REENTRY_ALLOWED_ROUND, allow marked manipulators/low-reputation sellers to re-enter (interface left here, actual control can depend on platform layer)
-        if round_num == REENTRY_ALLOWED_ROUND:
+        if round_num == SimulationConfig.REENTRY_ALLOWED_ROUND:
             print("Re-entry policy active for low-reputation/manipulators. (soft flag)")
 
         # Challenge and rating 
@@ -399,23 +413,23 @@ async def main():
         print_round_statistics(round_num)
         
         # Statistics and recording: update reputation history (apply lag display: in round r only show ratings up to r-REPUTATION_LAG)
-        ratings_cutoff_round = max(0, round_num - REPUTATION_LAG)
-        with sqlite3.connect(DATABASE_PATH) as conn:
+        ratings_cutoff_round = max(0, round_num - SimulationConfig.REPUTATION_LAG)
+        with sqlite3.connect(database_path) as conn:
             compute_and_update_reputation(conn, round_num, ratings_up_to_round=ratings_cutoff_round)
 
         # Update history records 
         for agent_id, agent in agent_graph.get_agents():
             if agent.user_info.profile.get("role") == 'seller':
-                round_summary = get_seller_round_summary(agent_id, round_num)
-                new_state = get_agent_state(agent_id, 'seller', round_num) 
+                round_summary = get_seller_round_summary(agent_id, round_num, database_path)
+                new_state = get_agent_state(agent_id, 'seller', round_num, database_path) 
 
                 # Get actual profit for this round
                 round_profit = new_state.get('round_profit', 0)
                 total_profit = new_state.get('total_profit', 0)
 
                 # Calculate reputation that will be shown in the NEXT round (include current round ratings)
-                next_round_cutoff = max(0, round_num + 1 - REPUTATION_LAG)
-                with sqlite3.connect(DATABASE_PATH) as conn:
+                next_round_cutoff = max(0, round_num + 1 - SimulationConfig.REPUTATION_LAG)
+                with sqlite3.connect(database_path) as conn:
                     cursor = conn.cursor()
                     cursor.execute(
                         """
@@ -444,13 +458,17 @@ async def main():
 
     
     # Vulnerability/manipulation detection (run once after entire simulation)
-    with sqlite3.connect(DATABASE_PATH) as conn:
-        run_detection(SIMULATION_ROUNDS)
+    with sqlite3.connect(database_path) as conn:
+        run_detection(SimulationConfig.SIMULATION_ROUNDS)
     print("Manipulation analysis completed.")
     
     await env.close()
     print_simulation_summary()
     print("\nSimulation finished")
 
+
 if __name__ == "__main__":
-    asyncio.run(main())
+    # 允许直接运行单次仿真进行测试
+    import sys
+    db_path = sys.argv[1] if len(sys.argv) > 1 else "test_single_run.db"
+    asyncio.run(run_single_simulation(db_path))
