@@ -164,6 +164,11 @@ class SocialAgent(ChatAgent):
         user_msg_content = f"{base_content}\n\n{env_prompt}"
         if extra_prompt:
             user_msg_content += f"\n\n## Additional Information:\n{extra_prompt}"
+        user_msg_content += (
+            "\n## Notice:\n"
+            "You must execute your action by calling a tool using the tool_call format. "
+            "Do not answer directly in natural language; always select and call a tool for your action."
+        )
 
         user_msg = BaseMessage.make_user_message(
             role_name="User",
