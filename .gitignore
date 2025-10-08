@@ -213,3 +213,4 @@ __marimo__/
 *.png
 .vscode/
 experiments/
+analysis/

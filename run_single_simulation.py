@@ -23,6 +23,23 @@ from dotenv import load_dotenv
 load_dotenv(override=True)
 
 
+def reset_agent_id_counter():
+    """重置agent ID计数器，确保每次运行都从1开始"""
+    import sys
+    import itertools
+    
+    # 方法1: 直接导入并重置模块中的计数器
+    from oasis.social_agent import agents_generator
+    agents_generator.id_gen = itertools.count(1)
+    print("Agent ID counter reset to 1 (method 1)")
+    
+    # 方法2: 如果模块已在sys.modules中，也重置它
+    if 'oasis.social_agent.agents_generator' in sys.modules:
+        module = sys.modules['oasis.social_agent.agents_generator']
+        module.id_gen = itertools.count(1)
+        print("Agent ID counter reset to 1 (method 2)")
+
+
 def get_agent_state(agent_id: int, role: str, round_num: int = -1, database_path: str = None) -> dict:
     """Get the state of an agent at a specific round or current state."""
     if database_path is None:
@@ -175,11 +192,14 @@ def initialize_market_roles(agent_graph: AgentGraph, database_path: str = None):
     try:
         # 获取所有agent的信息
         agents_info = []
+        actual_agent_ids = []
         for agent_id, agent in agent_graph.get_agents():
             role = agent.user_info.profile.get("other_info", {}).get("role")
             agents_info.append((agent_id, role))
+            actual_agent_ids.append(agent_id)
         
         print(f"Found {len(agents_info)} agents to initialize")
+        print(f"Actual agent IDs in graph: {sorted(actual_agent_ids)}")
         
         # 设置seller角色（前NUM_SELLERS个agent）
         for i in range(SimulationConfig.NUM_SELLERS):
@@ -221,6 +241,9 @@ async def run_single_simulation(database_path: str):
         database_path: 数据库文件路径
     """
     print("Starting market simulation initialization...")
+    
+    # 重置agent ID计数器以确保每次运行都从1开始
+    reset_agent_id_counter()
     
     # 设置环境变量
     os.environ['MARKET_DB_PATH'] = database_path
