@@ -24,45 +24,11 @@ from oasis.social_platform.database import get_db_path
 
 
 class Environment(ABC):
-
     @abstractmethod
     def to_text_prompt(self) -> str:
         r"""Convert the environment to text prompt."""
         raise NotImplementedError
 
-def get_product_listings_for_env() -> str:
-    """从数据库查询所有在售商品并格式化为字符串。"""
-    DATABASE_PATH = 'market_sim.db' # 确保文件名一致
-    if not os.path.exists(DATABASE_PATH):
-        return "No products are currently on sale."
-        
-    conn = sqlite3.connect(DATABASE_PATH)
-    cursor = conn.cursor()
-    listings = "No products are currently on sale."
-    try:
-        cursor.execute(
-            """
-            SELECT p.post_id, p.user_id, p.advertised_quality, p.price, p.has_warrant,
-                   COALESCE(u.reputation_score, 0) AS reputation_score
-            FROM post p
-            LEFT JOIN user u ON u.user_id = p.user_id
-            WHERE p.status = 'on_sale'
-            """
-        )
-        products = cursor.fetchall()
-        if products:
-            listings = "Here is the list of products currently on sale:\n"
-            for p in products:
-                warrant_info = " (Warranted)" if p[4] else ""
-                listings += (
-                    f"- Product ID: {p[0]}, Seller ID: {p[1]}, Seller Reputation: {p[5]}, "
-                    f"Advertised Quality: {p[2]}, Price: ${p[3]:.2f}{warrant_info}\n"
-                )
-    except sqlite3.Error as e:
-        print(f"数据库查询错误 (get_product_listings_for_env): {e}")
-    finally:
-        conn.close()
-    return listings
 
 class SocialEnvironment(Environment):
     followers_env_template = Template("I have $num_followers followers.")
@@ -93,10 +59,44 @@ class SocialEnvironment(Environment):
         "Cumulative Utility: $cumulative_utility\n\n"
         "Current available products:\n$products")
 
-    def __init__(self, action: SocialAction):
+    def __init__(self, action: SocialAction, db_path: str = ""):
         self.action = action
+        self.db_path = db_path if db_path else get_db_path()
         # === market-sim: 添加一个标志位来区分模式 ===
         self.is_market_sim = False 
+
+    def get_product_listings_for_env(self) -> str:
+        """从数据库查询所有在售商品并格式化为字符串。"""
+        if not os.path.exists(self.db_path):
+            return "No products are currently on sale."
+            
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        listings = "No products are currently on sale."
+        try:
+            cursor.execute(
+                """
+                SELECT p.post_id, p.user_id, p.advertised_quality, p.price, p.has_warrant,
+                    COALESCE(u.reputation_score, 0) AS reputation_score
+                FROM post p
+                LEFT JOIN user u ON u.user_id = p.user_id
+                WHERE p.status = 'on_sale'
+                """
+            )
+            products = cursor.fetchall()
+            if products:
+                listings = "Here is the list of products currently on sale:\n"
+                for p in products:
+                    warrant_info = " (Warranted)" if p[4] else ""
+                    listings += (
+                        f"- Product ID: {p[0]}, Seller ID: {p[1]}, Seller Reputation: {p[5]}, "
+                        f"Advertised Quality: {p[2]}, Price: ${p[3]:.2f}{warrant_info}\n"
+                    )
+        except sqlite3.Error as e:
+            print(f"数据库查询错误 (get_product_listings_for_env): {e}")
+        finally:
+            conn.close()
+        return listings
 
     async def get_posts_env(self) -> str:
         posts = await self.action.refresh()
@@ -111,9 +111,8 @@ class SocialEnvironment(Environment):
     async def get_followers_env(self) -> str:
         # TODO: Implement followers env
         agent_id = self.action.agent_id
-        db_path = get_db_path()
         try:
-            conn = sqlite3.connect(db_path)
+            conn = sqlite3.connect(self.db_path)
             cursor = conn.cursor()
             cursor.execute("SELECT num_followers FROM user WHERE agent_id = ?",
                            (agent_id, ))
@@ -129,8 +128,7 @@ class SocialEnvironment(Environment):
         # TODO: Implement follows env
         agent_id = self.action.agent_id
         try:
-            db_path = get_db_path()
-            conn = sqlite3.connect(db_path)
+            conn = sqlite3.connect(self.db_path)
             cursor = conn.cursor()
             cursor.execute(
                 "SELECT num_followings FROM user WHERE agent_id = ?",
@@ -171,7 +169,7 @@ class SocialEnvironment(Environment):
         if market_phase == "listing" and role == "seller":
             # 卖家在listing阶段：观察上一阶段的购买反馈和当前市场状态
             previous_feedback = self._get_previous_feedback(agent)
-            available_products = get_product_listings_for_env()
+            available_products = self.get_product_listings_for_env()
             total_profit = getattr(agent, 'total_profit', 0)
             
             return MarketEnv_prompt.SELLER_LISTING_ENV.format(
@@ -184,7 +182,7 @@ class SocialEnvironment(Environment):
             
         elif market_phase == "purchase" and role == "buyer":
             # 买家在purchase阶段：观察当前可购买的商品和卖家信息
-            available_products = get_product_listings_for_env()
+            available_products = self.get_product_listings_for_env()
             seller_reputation_info = self._get_seller_reputation_info()
             
             return MarketEnv_prompt.BUYER_PURCHASE_ENV.format(

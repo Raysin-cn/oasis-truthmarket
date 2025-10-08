@@ -268,6 +268,7 @@ async def run_single_simulation(database_path: str):
         user_prompt=SELLER_GENERATION_USER_PROMPT,
         market_type=SimulationConfig.MARKET_TYPE,
         role="seller",
+        db_path=database_path,
     )
     
     # Generate buyer agents
@@ -277,7 +278,8 @@ async def run_single_simulation(database_path: str):
         sys_prompt=BUYER_GENERATION_SYS_PROMPT,
         user_prompt=BUYER_GENERATION_USER_PROMPT,
         market_type=SimulationConfig.MARKET_TYPE,
-        role="buyer"
+        role="buyer",
+        db_path=database_path,
     )
     
     # Add seller agents

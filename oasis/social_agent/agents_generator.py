@@ -666,7 +666,8 @@ async def generate_agent_from_LLM(agents_num:int,
                                 role:str,
                                 market_type: str,
                                 agent_graph: AgentGraph = None,
-                                agent_checkpoint_save: bool = True):
+                                agent_checkpoint_save: bool = True,
+                                db_path: str = ""):
 
     if agent_checkpoint_save == True and os.path.exists(f"./data/agent_checkpoint_{role}.json"):
         with open(f"./data/agent_checkpoint_{role}.json", "r") as file:
@@ -744,6 +745,7 @@ async def generate_agent_from_LLM(agents_num:int,
             agent_graph=agent_graph,
             # available_actions=get_prompt_child(role, "ACTIONS", market_type), 
             max_iteration = 1,
+            db_path=db_path,
         )
 
         agent_graph.add_agent(agent)

@@ -67,11 +67,12 @@ class SocialAgent(ChatAgent):
                  available_actions: list[ActionType] = [],
                  tools: Optional[List[Union[FunctionTool, Callable]]] = [],
                  max_iteration: int = 1,
-                 interview_record: bool = False):
+                 interview_record: bool = False,
+                 db_path: str = ""):
         self.social_agent_id = agent_id
         self.user_info = user_info
         self.channel = channel or Channel()
-        self.env = SocialEnvironment(SocialAction(agent_id, self.channel))
+        self.env = SocialEnvironment(SocialAction(agent_id, self.channel), db_path=db_path)
         
         # Agent state attributes
         self.current_budget = 100.0  # Seller initial budget
