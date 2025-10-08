@@ -2,12 +2,8 @@ import os
 import sqlite3
 from typing import Optional, Tuple
 
-DATABASE_PATH = os.getenv("MARKET_DB_PATH", "market_sim.db")
-
-
 def _connect(db_path: Optional[str] = None) -> sqlite3.Connection:
-    return sqlite3.connect(db_path or DATABASE_PATH)
-
+    return sqlite3.connect(db_path)
 
 def ensure_tables(conn: sqlite3.Connection) -> None:
     cursor = conn.cursor()

@@ -432,7 +432,7 @@ def main():
     """命令行入口点"""
     import argparse
     parser = argparse.ArgumentParser(description='分析多次运行实验结果')
-    parser.add_argument('--experiment_id', help='实验ID', default='experiment_20251008_104645')
+    parser.add_argument('--experiment_id', help='实验ID', default='experiment_20251008_131508')
     args = parser.parse_args()
     
     asyncio.run(analyze_experiment(args.experiment_id))

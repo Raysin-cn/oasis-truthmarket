@@ -432,10 +432,10 @@ async def run_single_simulation(database_path: str):
             await env.step(post_purchase_actions)
         print("All post-purchase actions are complete.")
 
-        clear_market()
+        clear_market(database_path)
         
         # Print round statistics
-        print_round_statistics(round_num)
+        print_round_statistics(round_num, database_path)
         
         # Statistics and recording: update reputation history (apply lag display: in round r only show ratings up to r-REPUTATION_LAG)
         ratings_cutoff_round = max(0, round_num - SimulationConfig.REPUTATION_LAG)
@@ -483,12 +483,11 @@ async def run_single_simulation(database_path: str):
 
     
     # Vulnerability/manipulation detection (run once after entire simulation)
-    with sqlite3.connect(database_path) as conn:
-        run_detection(SimulationConfig.SIMULATION_ROUNDS)
+    run_detection(SimulationConfig.SIMULATION_ROUNDS, database_path)
     print("Manipulation analysis completed.")
     
     await env.close()
-    print_simulation_summary()
+    print_simulation_summary(database_path)
     print("\nSimulation finished")
 
 

@@ -6,14 +6,13 @@ from typing import List, Dict, Any, Optional
 from datetime import datetime
 from config import SimulationConfig
 
-DATABASE_PATH = 'market_sim.db'
 
-def print_round_statistics(round_num: int):
+def print_round_statistics(round_num: int, db_path: str = ""):
     """Print current round profit statistics."""
-    if not os.path.exists(DATABASE_PATH):
+    if not os.path.exists(db_path):
         return
     
-    conn = sqlite3.connect(DATABASE_PATH)
+    conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
     try:
         print(f"\n--- Round {round_num} Statistics ---")
@@ -61,11 +60,11 @@ def print_round_statistics(round_num: int):
     finally:
         conn.close()
 
-def clear_market():
+def clear_market(db_path: str = ""):
     """Update all products on sale status to 'expired' to clear the market."""
-    if not os.path.exists(DATABASE_PATH):
+    if not os.path.exists(db_path):
         return
-    conn = sqlite3.connect(DATABASE_PATH)
+    conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
     try:
         # Update all products with status 'on_sale' to 'expired'
@@ -79,12 +78,12 @@ def clear_market():
     finally:
         conn.close()
 
-def print_simulation_summary():
+def print_simulation_summary(db_path: str = ""):
     """Print summary statistics for the entire simulation."""
-    if not os.path.exists(DATABASE_PATH):
+    if not os.path.exists(db_path):
         return
     
-    conn = sqlite3.connect(DATABASE_PATH)
+    conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
     try:
         print(f"\n{'='*50}")
