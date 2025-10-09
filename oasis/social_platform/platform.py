@@ -1782,9 +1782,6 @@ class Platform:
             # 2. 更新交易表中的评分
             update_trans_query = "UPDATE transactions SET rating = ? WHERE transaction_id = ?"
             self.pl_utils._execute_db_command(update_trans_query, (rating, transaction_id), commit=True)
-            
-            # 3. 声誉分数不在此处即时累加，统一由离线计算模块按累计评分/滞后来写入
-            #    避免与 compute_and_update_reputation 的结果相互覆盖或双重计算。
 
             # 4. 在 trace 表中记录
             action_info = {"transaction_id": transaction_id, "rating": rating}
@@ -1880,8 +1877,8 @@ class Platform:
             # 按模拟语义：重置负声誉为 0（或直接设置为非负基线）
             reset_needed = True if not message else message.get("reset_reputation", True)
             if reset_needed:
-                update_query = "UPDATE user SET reputation_score = 0 WHERE user_id = ?"
-                self.pl_utils._execute_db_command(update_query, (seller_id,), commit=True)
+                update_query = "UPDATE user SET reputation_score = 0, enter_market_round = ? WHERE user_id = ?"
+                self.pl_utils._execute_db_command(update_query, (current_time, seller_id,), commit=True)
 
             self.pl_utils._record_trace(seller_id, ActionType.REENTER_MARKET.value, message or {}, current_time)
             return {"success": True, "message": f"卖家 {seller_id} 已重新进入市场，声誉已刷新。"}

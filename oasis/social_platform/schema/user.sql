@@ -12,5 +12,6 @@ CREATE TABLE user (
     role VARCHAR(10),
     reputation_score INTEGER DEFAULT 0,
     profit_utility_score DECIMAL(10, 2) DEFAULT 0.0,
-    market_id VARCHAR(10)
+    market_id VARCHAR(10),
+    enter_market_round INTEGER DEFAULT 0
 );

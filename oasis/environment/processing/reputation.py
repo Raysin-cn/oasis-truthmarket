@@ -62,6 +62,7 @@ def _get_run_meta() -> Tuple[int, Optional[int]]:
 def compute_and_update_reputation(conn: sqlite3.Connection, round_number: int, ratings_up_to_round: Optional[int] = None) -> None:
     """
     计算每个卖家的公共声誉：按评分的累计平均。
+    考虑卖家的 enter_market 时间，只统计从该时间点开始的声誉累积。
     - round_number: 当前快照所属的回合（用于写入 reputation_history.round）
     - ratings_up_to_round: 评分聚合所考虑的最大回合（用于实现滞后显示）。
       若为 None，则等同于使用 round_number。
@@ -71,26 +72,30 @@ def compute_and_update_reputation(conn: sqlite3.Connection, round_number: int, r
 
     effective_max_round = round_number if ratings_up_to_round is None else max(0, int(ratings_up_to_round))
 
-    # 以 effective_max_round 作为评分聚合窗口上限
-    cursor.execute(
-        """
-        SELECT t.seller_id, COUNT(t.rating) as cnt, COALESCE(SUM(t.rating), 0)
-        FROM transactions t
-        WHERE t.rating IS NOT NULL AND t.round_number <= ?
-        GROUP BY t.seller_id
-        """,
-        (effective_max_round,),
-    )
-    aggregated = {row[0]: (int(row[1]), int(row[2])) for row in cursor.fetchall()}
-
-    # Get list of all sellers from user table
-    cursor.execute("SELECT user_id FROM user WHERE role = 'seller'")
-    seller_ids = [r[0] for r in cursor.fetchall()]
+    # 获取所有卖家及其 enter_market 时间
+    cursor.execute("SELECT user_id, enter_market_round FROM user WHERE role = 'seller'")
+    sellers_info = {row[0]: row[1] for row in cursor.fetchall()}
 
     run_id, seed = _get_run_meta()
 
-    for seller_id in seller_ids:
-        num_ratings, sum_ratings = aggregated.get(seller_id, (0, 0))
+    for seller_id, enter_market_time in sellers_info.items():
+            # 只统计从 enter_market_time 开始的交易
+        cursor.execute(
+            """
+            SELECT COUNT(t.rating) as cnt, COALESCE(SUM(t.rating), 0)
+            FROM transactions t
+            WHERE t.seller_id = ? AND t.rating IS NOT NULL 
+            AND t.round_number <= ? AND t.round_number >= ?
+            """,
+            (seller_id, effective_max_round, enter_market_time),
+        )
+        
+        result = cursor.fetchone()
+        if result:
+            num_ratings, sum_ratings = int(result[0]), int(result[1])
+        else:
+            num_ratings, sum_ratings = 0, 0
+
         if num_ratings > 0:
             avg_rating = round(sum_ratings)
         else:

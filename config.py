@@ -12,7 +12,7 @@ class SimulationConfig:
     """市场仿真配置类"""
     
     # 实验配置
-    RUNS = 10  # 重复实验次数
+    RUNS = 50  # 重复实验次数
     NUM_SELLERS = 10
     NUM_BUYERS = 10
     SIMULATION_ROUNDS = 7
