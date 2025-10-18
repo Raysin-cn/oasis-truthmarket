@@ -22,7 +22,7 @@ class SimulationConfig:
     REENTRY_ALLOWED_ROUND = 5  # 重新进入市场允许轮数
     INITIAL_WINDOW_ROUNDS = [1, 2]  # 隐藏完整历史的初始轮数
     EXIT_ROUND = 7  # 退出市场允许轮数
-    MARKET_TYPE = 'reputation_only'
+    MARKET_TYPE = 'reputation_and_warrant'
     
     # 模型配置
     MODEL_PLATFORM = "OPENAI"

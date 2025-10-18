@@ -130,7 +130,7 @@ class Platform:
             "lq_cost": 1.0,
             "hq_price": 5.0,
             "lq_price": 3.0,
-            "warrant_escrow": 3.0,
+            "warrant_escrow": 2.0,
             "challenge_cost": 1.0,
             "penalty": 4.0
         }
@@ -1670,13 +1670,23 @@ class Platform:
             if not post_result:
                 return {"success": False, "error": f"ID为 {post_id} 的商品未找到。"}
             
-            seller_id, status, advertised_quality, true_quality, has_warrant, price, cost = post_result
+            seller_user_id, status, advertised_quality, true_quality, has_warrant, price, cost = post_result
             
-            # 获取卖家声誉分数
-            seller_reputation_query = "SELECT reputation_score FROM user WHERE user_id = ?"
-            self.pl_utils._execute_db_command(seller_reputation_query, (seller_id,))
-            reputation_result = self.db_cursor.fetchone()
-            seller_reputation = reputation_result[0] if reputation_result else 0
+            # 获取卖家的agent_id和声誉分数
+            seller_info_query = "SELECT agent_id, reputation_score FROM user WHERE user_id = ?"
+            self.pl_utils._execute_db_command(seller_info_query, (seller_user_id,))
+            seller_info_result = self.db_cursor.fetchone()
+            if not seller_info_result:
+                return {"success": False, "error": "卖家信息未找到。"}
+            seller_agent_id, seller_reputation = seller_info_result
+            
+            # 获取买家的user_id
+            buyer_info_query = "SELECT user_id FROM user WHERE agent_id = ?"
+            self.pl_utils._execute_db_command(buyer_info_query, (buyer_id,))
+            buyer_info_result = self.db_cursor.fetchone()
+            if not buyer_info_result:
+                return {"success": False, "error": "买家信息未找到。"}
+            buyer_user_id = buyer_info_result[0]
             
             # 计算卖家收益：销售价格 - 生产成本 - 保证金成本
             seller_profit = price - cost
@@ -1684,8 +1694,8 @@ class Platform:
                 seller_profit -= self.market_params['warrant_escrow']
             
             # 计算买家效用：商品质量带来的效用 - 购买价格
-            # 高质量商品效用为5，低质量商品效用为2
-            quality_utility = 5 if true_quality == 'HQ' else 2
+            # 高质量商品效用为8，低质量商品效用为5
+            quality_utility = 8 if true_quality == 'HQ' else 5
             buyer_utility = quality_utility - price
             
             # 更新商品状态为已售出
@@ -1701,7 +1711,7 @@ class Platform:
             """
             self.pl_utils._execute_db_command(
                 transaction_insert_query,
-                (post_id, seller_id, buyer_id, self.sandbox_clock.get_round_step(), 
+                (post_id, seller_user_id, buyer_user_id, self.sandbox_clock.get_round_step(), 
                  seller_profit, buyer_utility, current_time),
                 commit=True
             )
@@ -1709,11 +1719,11 @@ class Platform:
 
             # 更新卖家和买家的收益/效用分数
             self.pl_utils._execute_db_command(
-                "UPDATE user SET profit_utility_score = profit_utility_score + ? WHERE user_id = ?",
-                (seller_profit, seller_id), commit=True
+                "UPDATE user SET profit_utility_score = profit_utility_score + ? WHERE agent_id = ?",
+                (seller_profit, seller_agent_id), commit=True
             )
             self.pl_utils._execute_db_command(
-                "UPDATE user SET profit_utility_score = profit_utility_score + ? WHERE user_id = ?",
+                "UPDATE user SET profit_utility_score = profit_utility_score + ? WHERE agent_id = ?",
                 (buyer_utility, buyer_id), commit=True
             )
 
@@ -1725,7 +1735,7 @@ class Platform:
                 "agent_id": buyer_id,
                 "transaction_id": transaction_id,
                 "post_id": post_id,
-                "seller_id": seller_id,
+                "seller_id": seller_agent_id,
                 "advertised_quality": advertised_quality,
                 "true_quality": true_quality,
                 "has_warrant": bool(has_warrant),
