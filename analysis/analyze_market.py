@@ -9,6 +9,10 @@ import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
 
+# Set Chinese font for matplotlib
+plt.rcParams['font.sans-serif'] = ['SimHei', 'DejaVu Sans']  # Use SimHei for Chinese, fallback to DejaVu Sans
+plt.rcParams['axes.unicode_minus'] = False  # Fix minus sign display
+
 
 def read_table(conn: sqlite3.Connection, table: str) -> pd.DataFrame:
     try:
@@ -263,6 +267,131 @@ def plot_seller_actions_scatter(conn: sqlite3.Connection, out_dir: str) -> None:
     handles = listing_handles + action_handles
     ax.legend(handles=handles, title="Legend", bbox_to_anchor=(1.02, 1), loc="upper left", frameon=True)
     plot_save(fig, out_dir, "seller_actions_scatter")
+
+
+def plot_manipulation_behavior_statistics(conn: sqlite3.Connection, out_dir: str) -> None:
+    """Bar chart showing statistics of 5 types of manipulation behaviors."""
+    analysis_labels = read_table(conn, "analysis_labels")
+    if analysis_labels.empty:
+        return
+    
+    required = {"seller_id", "behavioral_pattern"}
+    if not required.issubset(analysis_labels.columns):
+        return
+    
+    df = analysis_labels[list(required)].copy()
+    df = df.dropna(subset=["behavioral_pattern"])
+    
+    if df.empty:
+        return
+    
+    # Count behavioral patterns
+    pattern_counts = df["behavioral_pattern"].value_counts()
+    
+    fig, ax = plt.subplots(figsize=(10, 6))
+    
+    # Create bar chart
+    colors = ["#32CD32", "#FFD700", "#FF4500", "#9370DB", "#DC143C"]  # Green, Gold, OrangeRed, Purple, Crimson
+    bars = ax.bar(pattern_counts.index, pattern_counts.values, 
+                  color=colors[:len(pattern_counts)], alpha=0.8, edgecolor="white", linewidth=1.5)
+    
+    ax.set_title("Manipulation Behavior Statistics", fontsize=16, fontweight="bold")
+    ax.set_xlabel("Behavioral Pattern")
+    ax.set_ylabel("Number of Sellers")
+    ax.tick_params(axis='x', rotation=45)
+    
+    # Add count labels on bars
+    for bar, count in zip(bars, pattern_counts.values):
+        height = bar.get_height()
+        ax.annotate(f'{count}',
+                   xy=(bar.get_x() + bar.get_width() / 2, height),
+                   xytext=(0, 3),
+                   textcoords="offset points",
+                   ha='center', va='bottom', fontsize=12, fontweight='bold')
+    
+    plot_save(fig, out_dir, "manipulation_behavior_statistics")
+
+
+def plot_seller_manipulation_details(conn: sqlite3.Connection, out_dir: str) -> None:
+    """Detailed manipulation behavior statistics for each seller."""
+    analysis_labels = read_table(conn, "analysis_labels")
+    if analysis_labels.empty:
+        return
+    
+    required = {"seller_id", "behavioral_pattern", "adaptation_detected", 
+               "warrant_abuse_detected", "exit_reentry_detected", "deception_rate_overall"}
+    if not required.issubset(analysis_labels.columns):
+        return
+    
+    df = analysis_labels[list(required)].copy()
+    df = df.dropna(subset=["seller_id"])
+    
+    if df.empty:
+        return
+    
+    # Prepare data
+    df["seller_id"] = df["seller_id"].astype(str)
+    df = df.sort_values("seller_id")
+    
+    # Create figure with multiple subplots
+    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 10))
+    
+    # Top plot: Behavioral patterns by seller
+    seller_ids = df["seller_id"].values
+    patterns = df["behavioral_pattern"].values
+    
+    # Color map for patterns
+    pattern_colors = {"honest": "#32CD32", "opportunistic": "#FFD700", 
+                     "systematic": "#FF4500", "adaptive": "#9370DB"}
+    colors = [pattern_colors.get(p, "#808080") for p in patterns]
+    
+    bars1 = ax1.bar(seller_ids, [1]*len(seller_ids), color=colors, alpha=0.8)
+    ax1.set_title("Manipulation Behavior Pattern by Seller", fontsize=14, fontweight="bold")
+    ax1.set_xlabel("Seller ID")
+    ax1.set_ylabel("Behavioral Pattern")
+    ax1.set_ylim(0, 1.2)
+    
+    # Add pattern labels on bars
+    for bar, pattern in zip(bars1, patterns):
+        height = bar.get_height()
+        ax1.annotate(pattern,
+                    xy=(bar.get_x() + bar.get_width() / 2, height/2),
+                    ha='center', va='center', fontsize=8, rotation=90, fontweight='bold')
+    
+    # Bottom plot: Heatmap of manipulation features
+    feature_cols = ["adaptation_detected", "warrant_abuse_detected", "exit_reentry_detected"]
+    feature_data = df[["seller_id"] + feature_cols].set_index("seller_id")
+    
+    # Convert boolean to int for visualization
+    for col in feature_cols:
+        feature_data[col] = feature_data[col].astype(float)
+    
+    im = ax2.imshow(feature_data.T, cmap="RdYlGn", aspect="auto", vmin=0, vmax=1)
+    ax2.set_title("Manipulation Features by Seller", fontsize=14, fontweight="bold")
+    ax2.set_xlabel("Seller ID")
+    ax2.set_ylabel("Manipulation Features")
+    
+    # Set ticks
+    ax2.set_xticks(range(len(feature_data.index)))
+    ax2.set_xticklabels(feature_data.index)
+    ax2.set_yticks(range(len(feature_cols)))
+    ax2.set_yticklabels(["Adaptation", "Warrant Abuse", "Exit-Reentry"])
+    
+    # Add text annotations
+    for i in range(len(feature_cols)):
+        for j in range(len(feature_data.index)):
+            value = feature_data.iloc[j, i]
+            text = "✓" if value > 0.5 else "✗"
+            ax2.text(j, i, text, ha="center", va="center", 
+                    color="white" if value > 0.5 else "black", fontsize=12, fontweight="bold")
+    
+    # Add colorbar
+    cbar = plt.colorbar(im, ax=ax2)
+    cbar.set_label("Detected (1) / Not Detected (0)")
+    
+    plot_save(fig, out_dir, "seller_manipulation_details")
+
+
 """Minimal analysis and visualization utilities."""
 
 
@@ -286,11 +415,26 @@ def main():
 
         # Load tables
         reph = read_table(conn, "reputation_history")
+        analysis_labels = read_table(conn, "analysis_labels")
+        
+        # Check if manipulator analysis data is available
+        has_manipulator_data = not analysis_labels.empty and "label_manipulator" in analysis_labels.columns
+        
         # Visualizations
         sns.set_theme(style="whitegrid")
+        
+        # Basic market analysis
         plot_reputation_over_rounds(reph, out_dir)
         plot_avg_price_by_advertised_quality(conn, out_dir)
         plot_seller_actions_scatter(conn, out_dir)
+        
+        # Manipulator analysis visualizations (if data available)
+        if has_manipulator_data:
+            print("Generating manipulator analysis visualizations...")
+            plot_manipulation_behavior_statistics(conn, out_dir)
+            plot_seller_manipulation_details(conn, out_dir)
+        else:
+            print("No manipulator analysis data found. Skipping advanced analysis.")
 
     print(f"Analysis complete. Figures saved to: {out_dir}")
 

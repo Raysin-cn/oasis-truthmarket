@@ -1799,7 +1799,7 @@ class Platform:
         try:
             # 1. 查询商品和交易信息
             query = """
-                SELECT p.seller_id, p.true_quality, p.advertised_quality, p.has_warrant, p.price, 
+                SELECT p.user_id, p.true_quality, p.advertised_quality, p.has_warrant, p.price, 
                        t.is_challenged, t.transaction_id, t.seller_profit, t.buyer_utility
                 FROM post p JOIN transactions t ON p.post_id = t.post_id
                 WHERE p.post_id = ? AND t.buyer_id = ?

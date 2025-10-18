@@ -12,7 +12,7 @@ class SimulationConfig:
     """市场仿真配置类"""
     
     # 实验配置
-    RUNS = 50  # 重复实验次数
+    RUNS = 50
     NUM_SELLERS = 10
     NUM_BUYERS = 10
     SIMULATION_ROUNDS = 7
@@ -22,7 +22,7 @@ class SimulationConfig:
     REENTRY_ALLOWED_ROUND = 5  # 重新进入市场允许轮数
     INITIAL_WINDOW_ROUNDS = [1, 2]  # 隐藏完整历史的初始轮数
     EXIT_ROUND = 7  # 退出市场允许轮数
-    MARKET_TYPE = 'reputation_only'  # 'reputation_and_warrant' or 'reputation_only'
+    MARKET_TYPE = 'reputation_only'
     
     # 模型配置
     MODEL_PLATFORM = "OPENAI"
@@ -89,13 +89,3 @@ class SimulationConfig:
         with open(paths['config_file'], 'w', encoding='utf-8') as f:
             json.dump(config_data, f, indent=2, ensure_ascii=False)
 
-
-# 向后兼容的常量（供现有代码使用）
-NUM_SELLERS = SimulationConfig.NUM_SELLERS
-NUM_BUYERS = SimulationConfig.NUM_BUYERS
-SIMULATION_ROUNDS = SimulationConfig.SIMULATION_ROUNDS
-REPUTATION_LAG = SimulationConfig.REPUTATION_LAG
-REENTRY_ALLOWED_ROUND = SimulationConfig.REENTRY_ALLOWED_ROUND
-INITIAL_WINDOW_ROUNDS = SimulationConfig.INITIAL_WINDOW_ROUNDS
-EXIT_ROUND = SimulationConfig.EXIT_ROUND
-MARKET_TYPE = SimulationConfig.MARKET_TYPE
