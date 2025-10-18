@@ -1672,6 +1672,12 @@ class Platform:
             
             seller_id, status, advertised_quality, true_quality, has_warrant, price, cost = post_result
             
+            # 获取卖家声誉分数
+            seller_reputation_query = "SELECT reputation_score FROM user WHERE user_id = ?"
+            self.pl_utils._execute_db_command(seller_reputation_query, (seller_id,))
+            reputation_result = self.db_cursor.fetchone()
+            seller_reputation = reputation_result[0] if reputation_result else 0
+            
             # 计算卖家收益：销售价格 - 生产成本 - 保证金成本
             seller_profit = price - cost
             if has_warrant:
@@ -1716,6 +1722,7 @@ class Platform:
 
             return {
                 "success": True, 
+                "agent_id": buyer_id,
                 "transaction_id": transaction_id,
                 "post_id": post_id,
                 "seller_id": seller_id,
@@ -1723,7 +1730,9 @@ class Platform:
                 "true_quality": true_quality,
                 "has_warrant": bool(has_warrant),
                 "seller_profit": seller_profit,
-                "buyer_utility": buyer_utility
+                "buyer_utility": buyer_utility,
+                "purchase_price": price,
+                "seller_reputation": seller_reputation
             }
         except Exception as e:
             return {"success": False, "error": str(e)}
