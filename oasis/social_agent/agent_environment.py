@@ -213,10 +213,13 @@ class SocialEnvironment(Environment):
             return f"Current Round: {current_round}/7\nRole: {role}, Phase: {market_phase}\nNo specific environment template available."
     
     def _get_previous_feedback(self, agent) -> str:
-        """获取上一阶段的购买反馈信息"""
-        # 这里应该从数据库或agent的历史记录中获取反馈信息
-        # 暂时返回模拟数据
-        if hasattr(agent, 'history_summary') and agent.history_summary != "This is the first round. You have no past performance data.":
+        """获取上一阶段的历史表现反馈信息"""
+        # 从agent的history_summary属性获取历史反馈信息
+        # 这个属性在run_single_simulation.py中通过sellers_history更新
+        if hasattr(agent, 'history_summary') and agent.history_summary:
+            # 检查是否为初始窗口期的隐藏消息
+            if agent.history_summary == "History hidden in initial window.":
+                return "This is within the initial window period. Historical performance data is not available yet."
             return agent.history_summary
         else:
             return "No previous feedback available. This is your first round."

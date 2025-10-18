@@ -61,7 +61,7 @@ def get_agent_state(agent_id: int, role: str, round_num: int = -1, database_path
         if role == 'seller':
             # Get seller basic information
             cursor.execute(
-                "SELECT reputation_score, profit_utility_score FROM user WHERE user_id = ?",
+                "SELECT reputation_score, profit_utility_score FROM user WHERE agent_id = ?",
                 (agent_id,)
             )
             result = cursor.fetchone()
@@ -70,18 +70,29 @@ def get_agent_state(agent_id: int, role: str, round_num: int = -1, database_path
             
             # Get sales information for this round
             if round_num > 0:
+                # First get user_id from agent_id
                 cursor.execute(
-                    "SELECT COUNT(*), SUM(seller_profit) FROM transactions WHERE seller_id = ? AND round_number = ?",
-                    (agent_id, round_num)
+                    "SELECT user_id FROM user WHERE agent_id = ?",
+                    (agent_id,)
                 )
-                sales_result = cursor.fetchone()
-                state['round_sales'] = sales_result[0] if sales_result else 0
-                state['round_profit'] = sales_result[1] if sales_result and sales_result[1] is not None else 0
+                user_result = cursor.fetchone()
+                if user_result:
+                    user_id = user_result[0]
+                    cursor.execute(
+                        "SELECT COUNT(*), SUM(seller_profit) FROM transactions WHERE seller_id = ? AND round_number = ?",
+                        (user_id, round_num)
+                    )
+                    sales_result = cursor.fetchone()
+                    state['round_sales'] = sales_result[0] if sales_result else 0
+                    state['round_profit'] = sales_result[1] if sales_result and sales_result[1] is not None else 0
+                else:
+                    state['round_sales'] = 0
+                    state['round_profit'] = 0
         
         elif role == 'buyer':
             # Get buyer basic information
             cursor.execute(
-                "SELECT profit_utility_score FROM user WHERE user_id = ?",
+                "SELECT profit_utility_score FROM user WHERE agent_id = ?",
                 (agent_id,)
             )
             result = cursor.fetchone()
@@ -90,13 +101,24 @@ def get_agent_state(agent_id: int, role: str, round_num: int = -1, database_path
             
             # Get purchase information for this round
             if round_num > 0:
+                # First get user_id from agent_id
                 cursor.execute(
-                    "SELECT COUNT(*), SUM(buyer_utility) FROM transactions WHERE buyer_id = ? AND round_number = ?",
-                    (agent_id, round_num)
+                    "SELECT user_id FROM user WHERE agent_id = ?",
+                    (agent_id,)
                 )
-                purchase_result = cursor.fetchone()
-                state['round_purchases'] = purchase_result[0] if purchase_result else 0
-                state['round_utility'] = purchase_result[1] if purchase_result and purchase_result[1] is not None else 0
+                user_result = cursor.fetchone()
+                if user_result:
+                    user_id = user_result[0]
+                    cursor.execute(
+                        "SELECT COUNT(*), SUM(buyer_utility) FROM transactions WHERE buyer_id = ? AND round_number = ?",
+                        (user_id, round_num)
+                    )
+                    purchase_result = cursor.fetchone()
+                    state['round_purchases'] = purchase_result[0] if purchase_result else 0
+                    state['round_utility'] = purchase_result[1] if purchase_result and purchase_result[1] is not None else 0
+                else:
+                    state['round_purchases'] = 0
+                    state['round_utility'] = 0
     
     except sqlite3.Error as e:
         print(f"Database query error (get_agent_state): {e}")
@@ -129,7 +151,7 @@ def get_product_listings(database_path: str = None) -> str:
             return "Database schema is incorrect: 'post' table is missing the 'status' column."
         cursor.execute(
             """
-            SELECT p.post_id, p.user_id, p.advertised_quality, p.price, p.has_warrant, 
+            SELECT p.post_id, u.agent_id, p.advertised_quality, p.price, p.has_warrant, 
                    COALESCE(u.reputation_score, 0) AS reputation_score
             FROM post p
             LEFT JOIN user u ON u.user_id = p.user_id
@@ -164,10 +186,20 @@ def get_seller_round_summary(seller_id: int, round_num: int, database_path: str 
     conn = sqlite3.connect(database_path)
     cursor = conn.cursor()
     try:
+        # First get user_id from agent_id
+        cursor.execute(
+            "SELECT user_id FROM user WHERE agent_id = ?",
+            (seller_id,)
+        )
+        user_result = cursor.fetchone()
+        if not user_result:
+            return summary
+        user_id = user_result[0]
+        
         # Query in post table by user_id and round_number
         cursor.execute(
             "SELECT advertised_quality, is_sold, price FROM post WHERE user_id = ? AND round_number = ? ORDER BY post_id DESC LIMIT 1",
-            (seller_id, round_num) # Query current round (round_num)
+            (user_id, round_num) # Query current round (round_num)
         )
         result = cursor.fetchone()
         if result:
@@ -408,7 +440,7 @@ async def run_single_simulation(database_path: str):
                 agent = agent_graph.get_agent(agent_id)
 
                 # Tools available for buyers in rating phase: only allow challenge warrant and rating
-                rating_tools = ['rate_transaction']
+                rating_tools = ['rate_transaction'] if SimulationConfig.MARKET_TYPE == 'reputation_only' else ['rate_transaction', 'challenge_warrant']
                 
                 # Store purchase information in agent for environment observation
                 agent.last_purchase_info = {
