@@ -213,6 +213,7 @@ __marimo__/
 *.png
 .vscode/
 experiments/
-analysis/**/*
+analysis/experiment_*
+analysis/comparison_*
 comparisions
 configs
