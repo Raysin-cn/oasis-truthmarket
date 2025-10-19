@@ -7,14 +7,14 @@ CREATE TABLE transactions (
     round_number INTEGER,
     rating INTEGER,
     is_challenged BOOLEAN,
-    -- 收益计算结果
+    -- Profit calculation results
     seller_profit REAL,
     buyer_utility REAL,
-    -- 挑战相关收益
+    -- Challenge related profits
     challenge_cost REAL,
     challenge_reward REAL,
     challenge_penalty REAL,
-    -- 时间戳
+    -- Timestamp
     created_at INTEGER,
     FOREIGN KEY(post_id) REFERENCES post(post_id),
     FOREIGN KEY(seller_id) REFERENCES user(user_id),

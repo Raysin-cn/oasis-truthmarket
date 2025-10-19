@@ -1,6 +1,6 @@
 """
 Market Simulation Configuration
-配置文件：包含所有仿真参数和设置
+Configuration file: contains all simulation parameters and settings
 """
 
 import os
@@ -9,38 +9,38 @@ from typing import Dict, Any
 
 
 class SimulationConfig:
-    """市场仿真配置类"""
+    """Market simulation configuration class"""
     
-    # 实验配置
+    # Experiment configuration
     RUNS = 50
     NUM_SELLERS = 10
     NUM_BUYERS = 10
     SIMULATION_ROUNDS = 7
     
-    # 市场规则参数
-    REPUTATION_LAG = 1  # 声誉滞后显示轮数
-    REENTRY_ALLOWED_ROUND = 5  # 重新进入市场允许轮数
-    INITIAL_WINDOW_ROUNDS = [1, 2]  # 隐藏完整历史的初始轮数
-    EXIT_ROUND = 7  # 退出市场允许轮数
-    MARKET_TYPE = 'reputation_and_warrant'
+    # Market rule parameters
+    REPUTATION_LAG = 1  # Reputation lag display rounds
+    REENTRY_ALLOWED_ROUND = 5  # Re-entry market allowed rounds
+    INITIAL_WINDOW_ROUNDS = [1, 2]  # Initial rounds with hidden complete history
+    EXIT_ROUND = 7  # Exit market allowed rounds
+    MARKET_TYPE = 'reputation_only'
     
-    # 模型配置
+    # Model configuration
     MODEL_PLATFORM = "OPENAI"
     # MODEL_TYPE = "gpt-4.1-mini-2025-04-14"
     MODEL_TYPE = "gpt-4o-mini"
     
-    # 路径配置
+    # Path configuration
     BASE_DATA_PATH = 'experiments'
     BASE_ANALYSIS_PATH = 'analysis'
     
     @classmethod
     def get_experiment_id(cls) -> str:
-        """生成实验ID（基于时间戳）"""
+        """Generate experiment ID (based on timestamp)"""
         return datetime.now().strftime("experiment_%Y%m%d_%H%M%S")
     
     @classmethod
     def get_experiment_paths(cls, experiment_id: str) -> Dict[str, str]:
-        """获取实验相关路径"""
+        """Get experiment related paths"""
         experiment_dir = os.path.join(cls.BASE_DATA_PATH, experiment_id)
         analysis_dir = os.path.join(cls.BASE_ANALYSIS_PATH, experiment_id)
         
@@ -54,13 +54,13 @@ class SimulationConfig:
     
     @classmethod
     def get_run_db_path(cls, experiment_id: str, run_id: int) -> str:
-        """获取指定运行的数据库路径"""
+        """Get database path for specified run"""
         experiment_dir = os.path.join(cls.BASE_DATA_PATH, experiment_id)
         return os.path.join(experiment_dir, f'run_{run_id}.db')
     
     @classmethod
     def to_dict(cls) -> Dict[str, Any]:
-        """将配置转换为字典格式"""
+        """Convert configuration to dictionary format"""
         return {
             'RUNS': cls.RUNS,
             'NUM_SELLERS': cls.NUM_SELLERS,
@@ -77,7 +77,7 @@ class SimulationConfig:
     
     @classmethod
     def save_config(cls, experiment_id: str):
-        """保存配置到实验目录"""
+        """Save configuration to experiment directory"""
         import json
         paths = cls.get_experiment_paths(experiment_id)
         os.makedirs(os.path.dirname(paths['config_file']), exist_ok=True)

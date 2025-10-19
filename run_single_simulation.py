@@ -1,6 +1,6 @@
 """
-单次市场仿真运行模块
-从run_market_simulation.py中提取的核心仿真逻辑
+Single market simulation run module
+Core simulation logic extracted from run_market_simulation.py
 """
 
 import asyncio
@@ -24,16 +24,16 @@ load_dotenv(override=True)
 
 
 def reset_agent_id_counter():
-    """重置agent ID计数器，确保每次运行都从1开始"""
+    """Reset agent ID counter to ensure each run starts from 1"""
     import sys
     import itertools
     
-    # 方法1: 直接导入并重置模块中的计数器
+    # Method 1: Directly import and reset counter in module
     from oasis.social_agent import agents_generator
     agents_generator.id_gen = itertools.count(1)
     print("Agent ID counter reset to 1 (method 1)")
     
-    # 方法2: 如果模块已在sys.modules中，也重置它
+    # Method 2: If module is already in sys.modules, reset it too
     if 'oasis.social_agent.agents_generator' in sys.modules:
         module = sys.modules['oasis.social_agent.agents_generator']
         module.id_gen = itertools.count(1)
@@ -222,7 +222,7 @@ def initialize_market_roles(agent_graph: AgentGraph, database_path: str = None):
     conn = sqlite3.connect(database_path)
     cursor = conn.cursor()
     try:
-        # 获取所有agent的信息
+        # Get information for all agents
         agents_info = []
         actual_agent_ids = []
         for agent_id, agent in agent_graph.get_agents():
@@ -233,7 +233,7 @@ def initialize_market_roles(agent_graph: AgentGraph, database_path: str = None):
         print(f"Found {len(agents_info)} agents to initialize")
         print(f"Actual agent IDs in graph: {sorted(actual_agent_ids)}")
         
-        # 设置seller角色（前NUM_SELLERS个agent）
+        # Set seller roles (first NUM_SELLERS agents)
         for i in range(SimulationConfig.NUM_SELLERS):
             agent_id = i + 1
             cursor.execute(
@@ -242,7 +242,7 @@ def initialize_market_roles(agent_graph: AgentGraph, database_path: str = None):
             )
             print(f"Set agent {agent_id} as seller")
         
-        # 设置buyer角色（接下来的NUM_BUYERS个agent）
+        # Set buyer roles (next NUM_BUYERS agents)
         for i in range(SimulationConfig.NUM_BUYERS):
             agent_id = SimulationConfig.NUM_SELLERS + i + 1
             cursor.execute(
@@ -253,7 +253,7 @@ def initialize_market_roles(agent_graph: AgentGraph, database_path: str = None):
         
         conn.commit()
         
-        # 验证设置结果
+        # Verify setup results
         cursor.execute("SELECT COUNT(*) FROM user WHERE role = 'seller'")
         seller_count = cursor.fetchone()[0]
         cursor.execute("SELECT COUNT(*) FROM user WHERE role = 'buyer'")
@@ -267,20 +267,20 @@ def initialize_market_roles(agent_graph: AgentGraph, database_path: str = None):
 
 
 async def run_single_simulation(database_path: str):
-    """运行单次市场仿真
+    """Run single market simulation
     
     Args:
-        database_path: 数据库文件路径
+        database_path: Database file path
     """
     print("Starting market simulation initialization...")
     
-    # 重置agent ID计数器以确保每次运行都从1开始
+    # Reset agent ID counter to ensure each run starts from 1
     reset_agent_id_counter()
     
-    # 设置环境变量
+    # Set environment variables
     os.environ['MARKET_DB_PATH'] = database_path
     
-    # 清理已存在的数据库
+    # Clean up existing database
     if os.path.exists(database_path):
         os.remove(database_path)
     
@@ -524,7 +524,7 @@ async def run_single_simulation(database_path: str):
 
 
 if __name__ == "__main__":
-    # 允许直接运行单次仿真进行测试
+    # Allow direct running of single simulation for testing
     import sys
     db_path = sys.argv[1] if len(sys.argv) > 1 else "test_single_run.db"
     asyncio.run(run_single_simulation(db_path))

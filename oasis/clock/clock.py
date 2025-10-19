@@ -21,7 +21,7 @@ class Clock:
         self.real_start_time = datetime.now()
         self.k = k
         self.time_step = 0
-        # 新增：显式的市场回合计数器
+        # New: explicit market round counter
         self.round_step = 0
 
     def time_transfer(self, now_time: datetime,
@@ -34,6 +34,6 @@ class Clock:
     def get_time_step(self) -> str:
         return str(self.time_step)
 
-    # 新增：获取当前市场回合
+    # New: get current market round
     def get_round_step(self) -> int:
         return int(self.round_step)
