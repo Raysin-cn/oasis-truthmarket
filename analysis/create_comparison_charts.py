@@ -2,6 +2,16 @@
 """
 Create market mechanism comparison visualization charts
 Compare Reputation-Only vs Reputation+Warrant markets
+
+This script generates comprehensive comparison visualizations including:
+1. Core metrics comparison (buyer utility, seller profit, transaction volume)
+2. Round-by-round progression analysis
+3. Distribution analysis (histograms and box plots)
+4. Deception behavior analysis (TQ=Low & AQ=High instances)
+
+The deception behavior chart quantifies seller deception by counting instances where
+the true product quality (TQ) is Low but the advertised quality (AQ) is High, indicating
+deliberate misrepresentation of product quality by sellers.
 """
 
 import json
@@ -20,8 +30,8 @@ sns.set_theme(style="whitegrid")
 
 # Configuration - Unified experiment IDs
 EXPERIMENT_CONFIG = {
-    'reputation_only': "experiment_20251019_153954",
-    'reputation_warrant': "experiment_20251019_171638"
+    'reputation_only': "experiment_20251019_171638",
+    'reputation_warrant': "experiment_20251016_053302"
 }
 
 def create_output_directory():
@@ -42,6 +52,156 @@ def load_experiment_data(exp_id):
     stats_file = f"analysis/{exp_id}/aggregated/aggregated_statistics.json"
     with open(stats_file, 'r', encoding='utf-8') as f:
         return json.load(f)
+
+def create_deception_behavior_comparison(output_dir):
+    """Create deception behavior comparison chart - TQ=Low and AQ=High instances
+    
+    This function quantifies seller deception across two market mechanisms by counting
+    instances where sellers post Low Quality (LQ) products but advertise them as High Quality (HQ).
+    
+    The analysis includes:
+    - Mean and standard deviation of deception instances per run
+    - Bar chart showing average deception rates for each mechanism
+    - Box plot showing distribution across all 50 runs
+    - Percentage change indicator showing relative increase/decrease
+    
+    Returns:
+        tuple: (output_path, statistics_dict)
+            - output_path: Path to the generated PNG chart
+            - statistics_dict: Dictionary containing:
+                * reputation_only_mean: Average deception instances in reputation-only system
+                * reputation_only_std: Standard deviation for reputation-only
+                * reputation_warrant_mean: Average deception instances in reputation+warrant system
+                * reputation_warrant_std: Standard deviation for reputation+warrant
+                * reputation_only_data: List of deception counts per run
+                * reputation_warrant_data: List of deception counts per run
+    
+    This metric is crucial for understanding how different market mechanisms affect
+    seller incentives and behavior regarding quality misrepresentation.
+    """
+    import sqlite3
+    
+    # Collect deception data for each run
+    rep_only_deceptions = []
+    rep_warrant_deceptions = []
+    
+    # Reputation-Only experiment
+    exp_dir = f"experiments/{EXPERIMENT_CONFIG['reputation_only']}"
+    for run_id in range(1, 51):  # 50 runs
+        db_path = f"{exp_dir}/run_{run_id}.db"
+        if os.path.exists(db_path):
+            try:
+                conn = sqlite3.connect(db_path)
+                cursor = conn.cursor()
+                # Count instances where true_quality='LQ' and advertised_quality='HQ'
+                cursor.execute("""
+                    SELECT COUNT(*) FROM post 
+                    WHERE true_quality = 'LQ' AND advertised_quality = 'HQ'
+                """)
+                deception_count = cursor.fetchone()[0]
+                rep_only_deceptions.append(deception_count)
+                conn.close()
+            except Exception as e:
+                print(f"Warning: Could not read deception data from {db_path}: {e}")
+                rep_only_deceptions.append(0)
+        else:
+            rep_only_deceptions.append(0)
+    
+    # Reputation+Warrant experiment
+    exp_dir = f"experiments/{EXPERIMENT_CONFIG['reputation_warrant']}"
+    for run_id in range(1, 51):  # 50 runs
+        db_path = f"{exp_dir}/run_{run_id}.db"
+        if os.path.exists(db_path):
+            try:
+                conn = sqlite3.connect(db_path)
+                cursor = conn.cursor()
+                # Count instances where true_quality='LQ' and advertised_quality='HQ'
+                cursor.execute("""
+                    SELECT COUNT(*) FROM post 
+                    WHERE true_quality = 'LQ' AND advertised_quality = 'HQ'
+                """)
+                deception_count = cursor.fetchone()[0]
+                rep_warrant_deceptions.append(deception_count)
+                conn.close()
+            except Exception as e:
+                print(f"Warning: Could not read deception data from {db_path}: {e}")
+                rep_warrant_deceptions.append(0)
+        else:
+            rep_warrant_deceptions.append(0)
+    
+    # Calculate statistics
+    rep_only_mean = np.mean(rep_only_deceptions)
+    rep_only_std = np.std(rep_only_deceptions)
+    rep_warrant_mean = np.mean(rep_warrant_deceptions)
+    rep_warrant_std = np.std(rep_warrant_deceptions)
+    
+    # Create chart
+    fig, axes = plt.subplots(1, 2, figsize=(14, 6))
+    fig.suptitle('Deception Behavior Analysis: TQ=Low & AQ=High Instances', 
+                 fontsize=16, fontweight='bold')
+    
+    colors = ['#ff9999', '#66b3ff']
+    labels = ['Reputation-Only', 'Reputation+Warrant']
+    values = [rep_only_mean, rep_warrant_mean]
+    stds = [rep_only_std, rep_warrant_std]
+    
+    # Bar chart comparison
+    ax = axes[0]
+    bars = ax.bar(labels, values, color=colors, alpha=0.8, 
+                 yerr=stds, capsize=10, error_kw={'linewidth': 2})
+    ax.set_title('Average Deception Instances per Run', fontsize=12, fontweight='bold')
+    ax.set_ylabel('Count of TQ=Low & AQ=High Posts')
+    ax.grid(True, alpha=0.3, axis='y')
+    
+    # Add value labels
+    for bar, val, std in zip(bars, values, stds):
+        height = bar.get_height()
+        ax.text(bar.get_x() + bar.get_width()/2., height + std + 0.5,
+               f'{val:.2f}±{std:.2f}', ha='center', va='bottom', fontweight='bold')
+    
+    # Calculate percentage change
+    if rep_only_mean > 0:
+        change_pct = ((rep_warrant_mean - rep_only_mean) / rep_only_mean) * 100
+        if change_pct < 0:
+            label_text = f'Reduction: {abs(change_pct):.1f}%'
+            color_box = 'lightgreen'
+        else:
+            label_text = f'Increase: +{change_pct:.1f}%'
+            color_box = 'lightcoral'
+        ax.text(0.5, 0.95, label_text, 
+               transform=ax.transAxes, ha='center', va='top',
+               bbox=dict(boxstyle="round,pad=0.3", facecolor=color_box, alpha=0.8),
+               fontweight='bold')
+    
+    # Box plot comparison
+    ax = axes[1]
+    bp = ax.boxplot([rep_only_deceptions, rep_warrant_deceptions], 
+                    tick_labels=labels,
+                    patch_artist=True,
+                    widths=0.6)
+    
+    # Color the boxes
+    for patch, color in zip(bp['boxes'], colors):
+        patch.set_facecolor(color)
+        patch.set_alpha(0.7)
+    
+    ax.set_title('Distribution of Deception Instances', fontsize=12, fontweight='bold')
+    ax.set_ylabel('Count of TQ=Low & AQ=High Posts per Run')
+    ax.grid(True, alpha=0.3, axis='y')
+    
+    plt.tight_layout()
+    output_path = output_dir / 'market_mechanism_deception_behavior.png'
+    plt.savefig(output_path, dpi=300, bbox_inches='tight')
+    plt.close()
+    
+    return output_path, {
+        'reputation_only_mean': rep_only_mean,
+        'reputation_only_std': rep_only_std,
+        'reputation_warrant_mean': rep_warrant_mean,
+        'reputation_warrant_std': rep_warrant_std,
+        'reputation_only_data': rep_only_deceptions,
+        'reputation_warrant_data': rep_warrant_deceptions
+    }
 
 def create_comparison_summary(output_dir):
     """Create core metrics comparison chart"""
@@ -269,6 +429,23 @@ def main():
         distribution_path = create_distribution_comparison(output_dir)
         config['charts_generated'].append(str(distribution_path.name))
         print(f"✅ Distribution comparison chart generated: {distribution_path}")
+        
+        deception_path, deception_data = create_deception_behavior_comparison(output_dir)
+        config['charts_generated'].append(str(deception_path.name))
+        print(f"✅ Deception behavior comparison chart generated: {deception_path}")
+        
+        # Add deception behavior statistics to config
+        config['deception_behavior_stats'] = {
+            'reputation_only': {
+                'mean': deception_data['reputation_only_mean'],
+                'std': deception_data['reputation_only_std']
+            },
+            'reputation_warrant': {
+                'mean': deception_data['reputation_warrant_mean'],
+                'std': deception_data['reputation_warrant_std']
+            },
+            'description': 'Count of instances where TQ=Low and AQ=High (seller deception behavior)'
+        }
         
         # Save configuration file
         save_config(output_dir, config)
