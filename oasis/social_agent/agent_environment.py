@@ -62,11 +62,11 @@ class SocialEnvironment(Environment):
     def __init__(self, action: SocialAction, db_path: str = ""):
         self.action = action
         self.db_path = db_path if db_path else get_db_path()
-        # === market-sim: 添加一个标志位来区分模式 ===
+        # === market-sim: add a flag to distinguish modes ===
         self.is_market_sim = False 
 
     def get_product_listings_for_env(self) -> str:
-        """从数据库查询所有在售商品并格式化为字符串。"""
+        """Query all products on sale from database and format as string."""
         if not os.path.exists(self.db_path):
             return "No products are currently on sale."
             
@@ -93,7 +93,7 @@ class SocialEnvironment(Environment):
                         f"Advertised Quality: {p[2]}, Price: ${p[3]:.2f}{warrant_info}\n"
                     )
         except sqlite3.Error as e:
-            print(f"数据库查询错误 (get_product_listings_for_env): {e}")
+            print(f"Database query error (get_product_listings_for_env): {e}")
         finally:
             conn.close()
         return listings
@@ -157,17 +157,17 @@ class SocialEnvironment(Environment):
         return groups_env
 
     def get_market_environment(self, agent=None, current_round=1, market_phase="general") -> str:
-        """为市场模拟获取环境信息，根据不同的市场阶段提供不同的观察内容。"""
+        """Get environment information for market simulation, providing different observation content based on different market phases."""
         from prompt import MarketEnv_prompt
         
         if not agent:
-            # 如果没有agent信息，返回基本环境信息
+            # If no agent information, return basic environment information
             return f"Current Round: {current_round}/7\nNo agent information available."
         
         role = agent.user_info.profile.get("role")
         
         if market_phase == "listing" and role == "seller":
-            # 卖家在listing阶段：观察上一阶段的购买反馈和当前市场状态
+            # Seller in listing phase: observe previous phase purchase feedback and current market status
             previous_feedback = self._get_previous_feedback(agent)
             available_products = self.get_product_listings_for_env()
             total_profit = getattr(agent, 'total_profit', 0)
@@ -181,7 +181,7 @@ class SocialEnvironment(Environment):
             )
             
         elif market_phase == "purchase" and role == "buyer":
-            # 买家在purchase阶段：观察当前可购买的商品和卖家信息
+            # Buyer in purchase phase: observe currently purchasable products and seller information
             available_products = self.get_product_listings_for_env()
             seller_reputation_info = self._get_seller_reputation_info()
             
@@ -193,7 +193,7 @@ class SocialEnvironment(Environment):
             )
             
         elif market_phase == "rating" and role == "buyer":
-            # 买家在rating阶段：观察购买后的产品具体信息
+            # Buyer in rating phase: observe specific product information after purchase
             purchase_info = getattr(agent, 'last_purchase_info', {})
             
             return MarketEnv_prompt.BUYER_RATING_ENV.format(
@@ -209,22 +209,25 @@ class SocialEnvironment(Environment):
             )
             
         else:
-            # 其他情况返回基本环境信息
+            # Other cases return basic environment information
             return f"Current Round: {current_round}/7\nRole: {role}, Phase: {market_phase}\nNo specific environment template available."
     
     def _get_previous_feedback(self, agent) -> str:
-        """获取上一阶段的购买反馈信息"""
-        # 这里应该从数据库或agent的历史记录中获取反馈信息
-        # 暂时返回模拟数据
-        if hasattr(agent, 'history_summary') and agent.history_summary != "This is the first round. You have no past performance data.":
+        """Get previous phase historical performance feedback information"""
+        # Get historical feedback information from agent's history_summary attribute
+        # This attribute is updated through sellers_history in run_single_simulation.py
+        if hasattr(agent, 'history_summary') and agent.history_summary:
+            # Check if it's a hidden message during initial window period
+            if agent.history_summary == "History hidden in initial window.":
+                return "This is within the initial window period. Historical performance data is not available yet."
             return agent.history_summary
         else:
             return "No previous feedback available. This is your first round."
     
     def _get_seller_reputation_info(self) -> str:
-        """获取卖家声誉信息"""
-        # 这里应该从数据库或平台中获取所有卖家的声誉信息
-        # 暂时返回模拟数据
+        """Get seller reputation information"""
+        # Should get all sellers' reputation information from database or platform here
+        # Return simulated data for now
         return "Seller reputation information can't be view."
 
     async def to_text_prompt(

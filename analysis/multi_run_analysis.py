@@ -20,7 +20,7 @@ import sys
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from config import SimulationConfig
-from analyze_market import read_table, ensure_output_dir, plot_save
+from analysis.analyze_market import read_table, ensure_output_dir, plot_save
 
 
 class MultiRunAnalyzer:
@@ -432,7 +432,7 @@ def main():
     """命令行入口点"""
     import argparse
     parser = argparse.ArgumentParser(description='分析多次运行实验结果')
-    parser.add_argument('--experiment_id', help='实验ID', default='experiment_20251008_171502')
+    parser.add_argument('--experiment_id', help='实验ID', default='experiment_20251013_111004')
     args = parser.parse_args()
     
     asyncio.run(analyze_experiment(args.experiment_id))

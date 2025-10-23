@@ -61,25 +61,25 @@ def _get_run_meta() -> Tuple[int, Optional[int]]:
 
 def compute_and_update_reputation(conn: sqlite3.Connection, round_number: int, ratings_up_to_round: Optional[int] = None) -> None:
     """
-    计算每个卖家的公共声誉：按评分的累计平均。
-    考虑卖家的 enter_market 时间，只统计从该时间点开始的声誉累积。
-    - round_number: 当前快照所属的回合（用于写入 reputation_history.round）
-    - ratings_up_to_round: 评分聚合所考虑的最大回合（用于实现滞后显示）。
-      若为 None，则等同于使用 round_number。
+    Calculate each seller's public reputation: cumulative average of ratings.
+    Consider seller's enter_market time, only count reputation accumulation from that time point.
+    - round_number: round that current snapshot belongs to (used for writing reputation_history.round)
+    - ratings_up_to_round: maximum round considered for rating aggregation (used to implement lag display).
+      If None, equivalent to using round_number.
     """
     ensure_tables(conn)
     cursor = conn.cursor()
 
     effective_max_round = round_number if ratings_up_to_round is None else max(0, int(ratings_up_to_round))
 
-    # 获取所有卖家及其 enter_market 时间
+    # Get all sellers and their enter_market times
     cursor.execute("SELECT user_id, enter_market_round FROM user WHERE role = 'seller'")
     sellers_info = {row[0]: row[1] for row in cursor.fetchall()}
 
     run_id, seed = _get_run_meta()
 
     for seller_id, enter_market_time in sellers_info.items():
-            # 只统计从 enter_market_time 开始的交易
+            # Only count transactions starting from enter_market_time
         cursor.execute(
             """
             SELECT COUNT(t.rating) as cnt, COALESCE(SUM(t.rating), 0)

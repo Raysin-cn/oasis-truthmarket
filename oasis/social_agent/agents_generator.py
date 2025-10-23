@@ -37,7 +37,7 @@ from prompt import get_prompt_child
 
 import itertools
 
-id_gen = itertools.count(1)  # 从1开始，每次+1
+id_gen = itertools.count(1)  # Start from 1, increment by 1 each time
 
 
 async def generate_agents(
@@ -368,7 +368,7 @@ async def generate_controllable_agents(
             }},
             recsys_type="reddit",
         )
-        # controllable的agent_id全都在llm agent的agent_id的前面
+        # All controllable agent_ids are before llm agent agent_ids
         agent = SocialAgent(agent_id=i,
                             user_info=user_info,
                             channel=channel,
@@ -387,7 +387,7 @@ async def generate_controllable_agents(
     for i in range(control_user_num):
         for j in range(control_user_num):
             agent = agent_graph.get_agent(i)
-            # controllable agent互相也全部关注
+            # All controllable agents follow each other
             if i != j:
                 user_id = agent_user_id_mapping[j]
                 await agent.env.action.follow(user_id)
@@ -416,7 +416,7 @@ async def gen_control_agents_with_data(
             },
             recsys_type="reddit",
         )
-        # controllable的agent_id全都在llm agent的agent_id的前面
+        # All controllable agent_ids are before llm agent agent_ids
         agent = SocialAgent(
             agent_id=i,
             user_info=user_info,
@@ -690,12 +690,12 @@ async def generate_agent_from_LLM(agents_num:int,
         user_message = user_prompt.format(i)
         user_trait_response = generator_agent.step(user_message)
         
-        # 清理 LLM 返回内容中的 markdown 代码块标记
+        # Clean markdown code block markers from LLM response content
         content = user_trait_response.msgs[0].content
         if content.startswith('```json'):
-            content = content[7:]  # 移除 ```json
+            content = content[7:]  # Remove ```json
         if content.endswith('```'):
-            content = content[:-3]  # 移除 ```
+            content = content[:-3]  # Remove ```
         content = content.strip()
         
         user_trait = json.loads(content)
@@ -711,14 +711,14 @@ async def generate_agent_from_LLM(agents_num:int,
         if idx >= agents_num:
             break
 
-        # 根据角色选择相应的TextPrompt模板
+        # Select corresponding TextPrompt template based on role
         template = get_prompt_child(role, "MASTER_PROMPT", market_type)
         
         profile = {
             "nodes": [],
             "edges": [],
             "other_info": {},
-            # 添加System_prompt模板所需的静态键值对
+            # Add static key-value pairs required by System_prompt template
             "user_profile": agent_info["user_char"],
             "role": role,
             "market_type": market_type, 

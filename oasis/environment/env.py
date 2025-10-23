@@ -70,7 +70,7 @@ class OasisEnv:
         self.llm_semaphore = asyncio.Semaphore(semaphore)
         # Environment state
         self.current_round = 1
-        self.market_phase = "general"  # 当前市场阶段：listing, purchase, rating, general
+        self.market_phase = "general"  # Current market phase: listing, purchase, rating, general
         if isinstance(platform, DefaultPlatformType):
             if database_path is None:
                 raise ValueError(
@@ -169,12 +169,12 @@ class OasisEnv:
                 elif isinstance(action, LLMAction):
                     tasks.append(self._perform_llm_action(agent, action))
 
-        # 执行所有任务并提取、返回结果列表
+        # Execute all tasks and extract, return result list
         responses = await asyncio.gather(*tasks)
         results = []
         for response in responses:
             if response and hasattr(response, 'info') and response.info and 'tool_calls' in response.info and response.info['tool_calls']:
-                # 提取每个成功调用的结果
+                # Extract result of each successful call
                 for tool_call in response.info['tool_calls']:
                     if tool_call.result:
                         results.append(tool_call.result)

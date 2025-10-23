@@ -1,6 +1,6 @@
 """
-单次市场仿真运行模块
-从run_market_simulation.py中提取的核心仿真逻辑
+Single market simulation run module
+Core simulation logic extracted from run_market_simulation.py
 """
 
 import asyncio
@@ -24,16 +24,16 @@ load_dotenv(override=True)
 
 
 def reset_agent_id_counter():
-    """重置agent ID计数器，确保每次运行都从1开始"""
+    """Reset agent ID counter to ensure each run starts from 1"""
     import sys
     import itertools
     
-    # 方法1: 直接导入并重置模块中的计数器
+    # Method 1: Directly import and reset counter in module
     from oasis.social_agent import agents_generator
     agents_generator.id_gen = itertools.count(1)
     print("Agent ID counter reset to 1 (method 1)")
     
-    # 方法2: 如果模块已在sys.modules中，也重置它
+    # Method 2: If module is already in sys.modules, reset it too
     if 'oasis.social_agent.agents_generator' in sys.modules:
         module = sys.modules['oasis.social_agent.agents_generator']
         module.id_gen = itertools.count(1)
@@ -61,7 +61,7 @@ def get_agent_state(agent_id: int, role: str, round_num: int = -1, database_path
         if role == 'seller':
             # Get seller basic information
             cursor.execute(
-                "SELECT reputation_score, profit_utility_score FROM user WHERE user_id = ?",
+                "SELECT reputation_score, profit_utility_score FROM user WHERE agent_id = ?",
                 (agent_id,)
             )
             result = cursor.fetchone()
@@ -70,18 +70,29 @@ def get_agent_state(agent_id: int, role: str, round_num: int = -1, database_path
             
             # Get sales information for this round
             if round_num > 0:
+                # First get user_id from agent_id
                 cursor.execute(
-                    "SELECT COUNT(*), SUM(seller_profit) FROM transactions WHERE seller_id = ? AND round_number = ?",
-                    (agent_id, round_num)
+                    "SELECT user_id FROM user WHERE agent_id = ?",
+                    (agent_id,)
                 )
-                sales_result = cursor.fetchone()
-                state['round_sales'] = sales_result[0] if sales_result else 0
-                state['round_profit'] = sales_result[1] if sales_result and sales_result[1] is not None else 0
+                user_result = cursor.fetchone()
+                if user_result:
+                    user_id = user_result[0]
+                    cursor.execute(
+                        "SELECT COUNT(*), SUM(seller_profit) FROM transactions WHERE seller_id = ? AND round_number = ?",
+                        (user_id, round_num)
+                    )
+                    sales_result = cursor.fetchone()
+                    state['round_sales'] = sales_result[0] if sales_result else 0
+                    state['round_profit'] = sales_result[1] if sales_result and sales_result[1] is not None else 0
+                else:
+                    state['round_sales'] = 0
+                    state['round_profit'] = 0
         
         elif role == 'buyer':
             # Get buyer basic information
             cursor.execute(
-                "SELECT profit_utility_score FROM user WHERE user_id = ?",
+                "SELECT profit_utility_score FROM user WHERE agent_id = ?",
                 (agent_id,)
             )
             result = cursor.fetchone()
@@ -90,13 +101,24 @@ def get_agent_state(agent_id: int, role: str, round_num: int = -1, database_path
             
             # Get purchase information for this round
             if round_num > 0:
+                # First get user_id from agent_id
                 cursor.execute(
-                    "SELECT COUNT(*), SUM(buyer_utility) FROM transactions WHERE buyer_id = ? AND round_number = ?",
-                    (agent_id, round_num)
+                    "SELECT user_id FROM user WHERE agent_id = ?",
+                    (agent_id,)
                 )
-                purchase_result = cursor.fetchone()
-                state['round_purchases'] = purchase_result[0] if purchase_result else 0
-                state['round_utility'] = purchase_result[1] if purchase_result and purchase_result[1] is not None else 0
+                user_result = cursor.fetchone()
+                if user_result:
+                    user_id = user_result[0]
+                    cursor.execute(
+                        "SELECT COUNT(*), SUM(buyer_utility) FROM transactions WHERE buyer_id = ? AND round_number = ?",
+                        (user_id, round_num)
+                    )
+                    purchase_result = cursor.fetchone()
+                    state['round_purchases'] = purchase_result[0] if purchase_result else 0
+                    state['round_utility'] = purchase_result[1] if purchase_result and purchase_result[1] is not None else 0
+                else:
+                    state['round_purchases'] = 0
+                    state['round_utility'] = 0
     
     except sqlite3.Error as e:
         print(f"Database query error (get_agent_state): {e}")
@@ -129,7 +151,7 @@ def get_product_listings(database_path: str = None) -> str:
             return "Database schema is incorrect: 'post' table is missing the 'status' column."
         cursor.execute(
             """
-            SELECT p.post_id, p.user_id, p.advertised_quality, p.price, p.has_warrant, 
+            SELECT p.post_id, u.agent_id, p.advertised_quality, p.price, p.has_warrant, 
                    COALESCE(u.reputation_score, 0) AS reputation_score
             FROM post p
             LEFT JOIN user u ON u.user_id = p.user_id
@@ -164,10 +186,20 @@ def get_seller_round_summary(seller_id: int, round_num: int, database_path: str 
     conn = sqlite3.connect(database_path)
     cursor = conn.cursor()
     try:
+        # First get user_id from agent_id
+        cursor.execute(
+            "SELECT user_id FROM user WHERE agent_id = ?",
+            (seller_id,)
+        )
+        user_result = cursor.fetchone()
+        if not user_result:
+            return summary
+        user_id = user_result[0]
+        
         # Query in post table by user_id and round_number
         cursor.execute(
             "SELECT advertised_quality, is_sold, price FROM post WHERE user_id = ? AND round_number = ? ORDER BY post_id DESC LIMIT 1",
-            (seller_id, round_num) # Query current round (round_num)
+            (user_id, round_num) # Query current round (round_num)
         )
         result = cursor.fetchone()
         if result:
@@ -190,7 +222,7 @@ def initialize_market_roles(agent_graph: AgentGraph, database_path: str = None):
     conn = sqlite3.connect(database_path)
     cursor = conn.cursor()
     try:
-        # 获取所有agent的信息
+        # Get information for all agents
         agents_info = []
         actual_agent_ids = []
         for agent_id, agent in agent_graph.get_agents():
@@ -201,7 +233,7 @@ def initialize_market_roles(agent_graph: AgentGraph, database_path: str = None):
         print(f"Found {len(agents_info)} agents to initialize")
         print(f"Actual agent IDs in graph: {sorted(actual_agent_ids)}")
         
-        # 设置seller角色（前NUM_SELLERS个agent）
+        # Set seller roles (first NUM_SELLERS agents)
         for i in range(SimulationConfig.NUM_SELLERS):
             agent_id = i + 1
             cursor.execute(
@@ -210,7 +242,7 @@ def initialize_market_roles(agent_graph: AgentGraph, database_path: str = None):
             )
             print(f"Set agent {agent_id} as seller")
         
-        # 设置buyer角色（接下来的NUM_BUYERS个agent）
+        # Set buyer roles (next NUM_BUYERS agents)
         for i in range(SimulationConfig.NUM_BUYERS):
             agent_id = SimulationConfig.NUM_SELLERS + i + 1
             cursor.execute(
@@ -221,7 +253,7 @@ def initialize_market_roles(agent_graph: AgentGraph, database_path: str = None):
         
         conn.commit()
         
-        # 验证设置结果
+        # Verify setup results
         cursor.execute("SELECT COUNT(*) FROM user WHERE role = 'seller'")
         seller_count = cursor.fetchone()[0]
         cursor.execute("SELECT COUNT(*) FROM user WHERE role = 'buyer'")
@@ -235,20 +267,20 @@ def initialize_market_roles(agent_graph: AgentGraph, database_path: str = None):
 
 
 async def run_single_simulation(database_path: str):
-    """运行单次市场仿真
+    """Run single market simulation
     
     Args:
-        database_path: 数据库文件路径
+        database_path: Database file path
     """
     print("Starting market simulation initialization...")
     
-    # 重置agent ID计数器以确保每次运行都从1开始
+    # Reset agent ID counter to ensure each run starts from 1
     reset_agent_id_counter()
     
-    # 设置环境变量
+    # Set environment variables
     os.environ['MARKET_DB_PATH'] = database_path
     
-    # 清理已存在的数据库
+    # Clean up existing database
     if os.path.exists(database_path):
         os.remove(database_path)
     
@@ -408,7 +440,7 @@ async def run_single_simulation(database_path: str):
                 agent = agent_graph.get_agent(agent_id)
 
                 # Tools available for buyers in rating phase: only allow challenge warrant and rating
-                rating_tools = ['rate_transaction']
+                rating_tools = ['rate_transaction'] if SimulationConfig.MARKET_TYPE == 'reputation_only' else ['rate_transaction', 'challenge_warrant']
                 
                 # Store purchase information in agent for environment observation
                 agent.last_purchase_info = {
@@ -492,7 +524,7 @@ async def run_single_simulation(database_path: str):
 
 
 if __name__ == "__main__":
-    # 允许直接运行单次仿真进行测试
+    # Allow direct running of single simulation for testing
     import sys
     db_path = sys.argv[1] if len(sys.argv) > 1 else "test_single_run.db"
     asyncio.run(run_single_simulation(db_path))
