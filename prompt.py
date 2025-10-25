@@ -529,7 +529,7 @@ def format_seller_history(history_log: list) -> str:
 
     history_string = "Here is a summary of your performance in previous rounds:\n"
     for entry in history_log:
-        history_string += f"- Round {entry['round']}: Listed a {entry['quality']} product. Sold: {entry['sold']}. Round Profit: {entry['profit']:.2f}. New Reputation: {entry['reputation']:.1f}. Total Profit: {entry.get('total_profit', 0):.2f}\n"
+        history_string += f"- Round {entry['round']}: Listed a True_quality {entry['true_quality']} and advertised_quality {entry['advertised_quality']} product. Sold: {entry['is_sold']} and got {entry['sold_numbers']} products. Round Profit: {entry['profit']:.2f}. New Reputation: {entry['reputation']:.1f}. Total Profit: {entry.get('total_profit', 0):.2f}\n"
 
     return history_string
 

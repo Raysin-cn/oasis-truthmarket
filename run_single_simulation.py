@@ -57,78 +57,59 @@ def get_agent_state(agent_id: int, role: str, round_num: int = -1, database_path
     cursor = conn.cursor()
     
     state = {}
-    try:
-        if role == 'seller':
-            # Get seller basic information
-            cursor.execute(
-                "SELECT reputation_score, profit_utility_score FROM user WHERE agent_id = ?",
-                (agent_id,)
-            )
-            result = cursor.fetchone()
-            state['reputation_score'] = result[0] if result else 0
-            state['total_profit'] = result[1] if result else 0
-            
-            # Get sales information for this round
-            if round_num > 0:
-                # First get user_id from agent_id
-                cursor.execute(
-                    "SELECT user_id FROM user WHERE agent_id = ?",
-                    (agent_id,)
-                )
-                user_result = cursor.fetchone()
-                if user_result:
-                    user_id = user_result[0]
-                    cursor.execute(
-                        "SELECT COUNT(*), SUM(seller_profit) FROM transactions WHERE seller_id = ? AND round_number = ?",
-                        (user_id, round_num)
-                    )
-                    sales_result = cursor.fetchone()
-                    state['round_sales'] = sales_result[0] if sales_result else 0
-                    state['round_profit'] = sales_result[1] if sales_result and sales_result[1] is not None else 0
-                else:
-                    state['round_sales'] = 0
-                    state['round_profit'] = 0
+    if role == 'seller':
+        # Get seller basic information
+        cursor.execute(
+            "SELECT reputation_score, profit_utility_score FROM user WHERE agent_id = ?",
+            (agent_id,)
+        )
+        result = cursor.fetchone()
+        state['reputation_score'] = result[0] if result else 0
+        state['total_profit'] = result[1] if result else 0
         
-        elif role == 'buyer':
-            # Get buyer basic information
+        # Get sales information for this round  #TODO maybe fetch from user table rather than transactions table
+        if round_num > 0:
+            user_id = agent_id
             cursor.execute(
-                "SELECT profit_utility_score FROM user WHERE agent_id = ?",
+                "SELECT COUNT(*), SUM(seller_profit) FROM transactions WHERE seller_id = ? AND round_number = ?",
+                (user_id, round_num)
+            )
+            sales_result = cursor.fetchone()
+            state['round_sales'] = sales_result[0] if sales_result else 0
+            state['round_profit'] = sales_result[1] if sales_result and sales_result[1] is not None else 0
+    
+    elif role == 'buyer':
+        # Get buyer basic information
+        cursor.execute(
+            "SELECT profit_utility_score FROM user WHERE agent_id = ?",
+            (agent_id,)
+        )
+        result = cursor.fetchone()
+        state['cumulative_utility'] = result[0] if result and result[0] is not None else 0
+        state['total_utility'] = result[0] if result and result[0] is not None else 0
+        
+        # Get purchase information for this round
+        if round_num > 0:
+            # First get user_id from agent_id
+            cursor.execute(
+                "SELECT user_id FROM user WHERE agent_id = ?",
                 (agent_id,)
             )
-            result = cursor.fetchone()
-            state['cumulative_utility'] = result[0] if result and result[0] is not None else 0
-            state['total_utility'] = result[0] if result and result[0] is not None else 0
-            
-            # Get purchase information for this round
-            if round_num > 0:
-                # First get user_id from agent_id
+            user_result = cursor.fetchone()
+            if user_result:
+                user_id = user_result[0]
                 cursor.execute(
-                    "SELECT user_id FROM user WHERE agent_id = ?",
-                    (agent_id,)
+                    "SELECT COUNT(*), SUM(buyer_utility) FROM transactions WHERE buyer_id = ? AND round_number = ?",
+                    (user_id, round_num)
                 )
-                user_result = cursor.fetchone()
-                if user_result:
-                    user_id = user_result[0]
-                    cursor.execute(
-                        "SELECT COUNT(*), SUM(buyer_utility) FROM transactions WHERE buyer_id = ? AND round_number = ?",
-                        (user_id, round_num)
-                    )
-                    purchase_result = cursor.fetchone()
-                    state['round_purchases'] = purchase_result[0] if purchase_result else 0
-                    state['round_utility'] = purchase_result[1] if purchase_result and purchase_result[1] is not None else 0
-                else:
-                    state['round_purchases'] = 0
-                    state['round_utility'] = 0
+                purchase_result = cursor.fetchone()
+                state['round_purchases'] = purchase_result[0] if purchase_result else 0
+                state['round_utility'] = purchase_result[1] if purchase_result and purchase_result[1] is not None else 0
+            else:
+                state['round_purchases'] = 0
+                state['round_utility'] = 0
     
-    except sqlite3.Error as e:
-        print(f"Database query error (get_agent_state): {e}")
-        # Return default values on error
-        if role == 'seller':
-            state = {'reputation_score': 0, 'total_profit': 0}
-        else:
-            state = {'cumulative_utility': 0, 'total_utility': 0}
-    finally:
-        conn.close()
+    conn.close()
         
     return state
 
@@ -178,10 +159,6 @@ def get_seller_round_summary(seller_id: int, round_num: int, database_path: str 
     """Get seller's product listing information and sales status for a specific round."""
     if database_path is None:
         database_path = os.environ.get('MARKET_DB_PATH', 'market_sim.db')
-    
-    summary = {"quality": "Did not list", "sold": "No", "price": 0}
-    if not os.path.exists(database_path):
-        return summary
         
     conn = sqlite3.connect(database_path)
     cursor = conn.cursor()
@@ -192,20 +169,24 @@ def get_seller_round_summary(seller_id: int, round_num: int, database_path: str 
             (seller_id,)
         )
         user_result = cursor.fetchone()
-        if not user_result:
-            return summary
         user_id = user_result[0]
         
         # Query in post table by user_id and round_number
         cursor.execute(
-            "SELECT advertised_quality, is_sold, price FROM post WHERE user_id = ? AND round_number = ? ORDER BY post_id DESC LIMIT 1",
-            (user_id, round_num) # Query current round (round_num)
+            "SELECT advertised_quality, true_quality, has_warrant, is_sold, cost, price FROM post WHERE user_id = ? AND round_number = ? ORDER BY post_id",
+            (user_id, round_num)
         )
-        result = cursor.fetchone()
-        if result:
-            summary["quality"] = result[0]
-            summary["sold"] = "Yes" if result[1] else "No"
-            summary["price"] = result[2] if result[1] else 0
+        summary = {"advertised_quality": None, "true_quality": None, "warrant": None, "is_sold": 0, "sold_numbers": 0, "cost": 0, "price": 0}
+        all_result = cursor.fetchall()
+        if all_result:
+            one_result = all_result[0]
+            summary["advertised_quality"] = one_result[0]
+            summary["true_quality"] = one_result[1]
+            summary["warrant"] = one_result[2]
+            summary["is_sold"] = one_result[3]
+            summary["sold_numbers"] = sum(1 for p in all_result if p[3])
+            summary["cost"] = one_result[4]
+            summary["price"] = one_result[5]
     except sqlite3.Error as e:
         print(f"Database query error (get_seller_round_summary): {e}")
     finally:
@@ -357,10 +338,7 @@ async def run_single_simulation(database_path: str):
 
                 # Hide complete history in initial window (show only aggregated/summary or empty)
                 history_log = sellers_history.get(agent_id, [])
-                if round_num in SimulationConfig.INITIAL_WINDOW_ROUNDS:
-                    visible_history_string = "History hidden in initial window."
-                else:
-                    visible_history_string = format_seller_history(history_log)
+                visible_history_string = format_seller_history(history_log)
                 
                 # Update environment state
                 env.current_round = round_num
@@ -481,7 +459,7 @@ async def run_single_simulation(database_path: str):
                 new_state = get_agent_state(agent_id, 'seller', round_num, database_path) 
 
                 # Get actual profit for this round
-                round_profit = new_state.get('round_profit', 0)
+                round_profit = (round_summary.get('price', 0) - round_summary.get('cost', 0)) * round_summary.get('sold_numbers', 0)
                 total_profit = new_state.get('total_profit', 0)
 
                 # Calculate reputation that will be shown in the NEXT round (include current round ratings)
@@ -497,15 +475,20 @@ async def run_single_simulation(database_path: str):
                         (next_round_cutoff, agent_id),
                     )
                     result = cursor.fetchone()
-                    if result and result[0] > 0:
-                        next_round_reputation = round(result[1] / result[0])
+                    if result:
+                        next_round_reputation = result[1]
                     else:
                         next_round_reputation = 0
 
                 sellers_history[agent_id].append({
                     "round": round_num,
-                    "quality": round_summary["quality"], 
-                    "sold": round_summary["sold"], 
+                    "true_quality": round_summary["true_quality"], 
+                    "advertised_quality": round_summary["advertised_quality"], 
+                    "warrant": round_summary["warrant"], 
+                    "is_sold": round_summary["is_sold"], 
+                    "sold_numbers": round_summary["sold_numbers"], 
+                    "cost": round_summary["cost"], 
+                    "price": round_summary["price"], 
                     "profit": round_profit,
                     "reputation": next_round_reputation,  # Use reputation that will be shown next round
                     "total_profit": total_profit
