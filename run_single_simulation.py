@@ -90,24 +90,14 @@ def get_agent_state(agent_id: int, role: str, round_num: int = -1, database_path
         
         # Get purchase information for this round
         if round_num > 0:
-            # First get user_id from agent_id
+            user_id = agent_id
             cursor.execute(
-                "SELECT user_id FROM user WHERE agent_id = ?",
-                (agent_id,)
+                "SELECT COUNT(*), SUM(buyer_utility) FROM transactions WHERE buyer_id = ? AND round_number = ?",
+                (user_id, round_num)
             )
-            user_result = cursor.fetchone()
-            if user_result:
-                user_id = user_result[0]
-                cursor.execute(
-                    "SELECT COUNT(*), SUM(buyer_utility) FROM transactions WHERE buyer_id = ? AND round_number = ?",
-                    (user_id, round_num)
-                )
-                purchase_result = cursor.fetchone()
-                state['round_purchases'] = purchase_result[0] if purchase_result else 0
-                state['round_utility'] = purchase_result[1] if purchase_result and purchase_result[1] is not None else 0
-            else:
-                state['round_purchases'] = 0
-                state['round_utility'] = 0
+            purchase_result = cursor.fetchone()
+            state['round_purchases'] = purchase_result[0] if purchase_result else 0
+            state['round_utility'] = purchase_result[1] if purchase_result and purchase_result[1] is not None else 0
     
     conn.close()
         
@@ -264,13 +254,14 @@ async def run_single_simulation(database_path: str):
     # Clean up existing database
     if os.path.exists(database_path):
         os.remove(database_path)
-    
+
     model = ModelFactory.create(
-        model_platform=ModelPlatformType.OPENAI,
-        model_type=ModelType.GPT_4O_MINI,
-        api_key=os.getenv("OPENAI_API_KEY"), 
-        url=os.getenv("OPENAI_BASE_URL"), 
+        model_platform=SimulationConfig.MODEL_PLATFORM,
+        model_type=SimulationConfig.MODEL_TYPE,
+        api_key=os.getenv("MODEL_API_KEY"), 
+        url=os.getenv("MODEL_BASE_URL"), 
     )
+
     agent_graph = AgentGraph()
 
     # Generate seller agents
@@ -281,6 +272,7 @@ async def run_single_simulation(database_path: str):
         user_prompt=SELLER_GENERATION_USER_PROMPT,
         market_type=SimulationConfig.MARKET_TYPE,
         role="seller",
+        model=model,
         db_path=database_path,
     )
     
@@ -292,6 +284,7 @@ async def run_single_simulation(database_path: str):
         user_prompt=BUYER_GENERATION_USER_PROMPT,
         market_type=SimulationConfig.MARKET_TYPE,
         role="buyer",
+        model=model,
         db_path=database_path,
     )
     
@@ -334,7 +327,7 @@ async def run_single_simulation(database_path: str):
         
         for agent_id, agent in agent_graph.get_agents():
             if agent.user_info.profile.get("role") == 'seller':
-                state = get_agent_state(agent_id, 'seller', database_path=database_path)
+                state = get_agent_state(agent_id, 'seller', round_num=round_num, database_path=database_path)
 
                 # Hide complete history in initial window (show only aggregated/summary or empty)
                 history_log = sellers_history.get(agent_id, [])
@@ -349,7 +342,7 @@ async def run_single_simulation(database_path: str):
                 
                 # System prompt already set during SocialAgent instantiation (static parameters)
                 # Prepare round prompt (dynamic parameters)
-                round_prompt = SELLER_ROUND_PROMPT.format(
+                seller_round_prompt = SELLER_ROUND_PROMPT.format(
                     history_summary=visible_history_string
                 )
                 # Tools available for sellers in listing phase
@@ -363,7 +356,7 @@ async def run_single_simulation(database_path: str):
 
                 seller_actions[agent] = LLMAction(
                     extra_action=listing_tools,
-                    extra_prompt=round_prompt
+                    extra_prompt=seller_round_prompt
                 )
         
         if seller_actions:
@@ -378,18 +371,22 @@ async def run_single_simulation(database_path: str):
 
         for agent_id, agent in agent_graph.get_agents():
              if agent.user_info.profile.get("role") == 'buyer':
-                state = get_agent_state(agent_id, 'buyer', database_path=database_path)
+                state = get_agent_state(agent_id, 'buyer', round_num=round_num, database_path=database_path)
                 # Update agent state attributes
                 agent.cumulative_utility = state['cumulative_utility']
                 
                 # System prompt already set during SocialAgent instantiation (static parameters)
                 # Prepare round prompt (dynamic parameters)
-                round_prompt = BUYER_ROUND_PROMPT.format()
+                buyer_round_prompt = (
+                    "In this phase, you are only allowed to perform the purchase_product_id action to purchase a product. "
+                    "Based on the market environment, product information, and your preferences, choose whether and which product to purchase. "
+                    "You cannot perform any other actions during this phase."
+                )
                 # Tools available for buyers in purchase phase: only allow purchase
                 purchase_tools = ['purchase_product_id']
                 buyer_actions[agent] = LLMAction(
                     extra_action=purchase_tools,
-                    extra_prompt=round_prompt
+                    extra_prompt=buyer_round_prompt
                 )
         
         purchase_results = []
@@ -432,10 +429,14 @@ async def run_single_simulation(database_path: str):
                     'seller_id': purchase_info.get("seller_id", 'N/A'),
                     'seller_reputation': purchase_info.get("seller_reputation", 0)
                 }
-                
+                buyer_rating_prompt = (
+                    "In this phase, you are allowed to perform the rate_transaction action to rate a transaction. " + "Or perform the challenge_warrant action to challenge the warrant of a transaction." if SimulationConfig.MARKET_TYPE == 'reputation_only' else "Or perform the challenge_warrant action to challenge the warrant of a transaction."
+                    "Based on the market environment, product information, and your preferences, choose whether and which product to rate. " + "Or challenge the warrant of a transaction." if SimulationConfig.MARKET_TYPE == 'reputation_only' else "Or challenge the warrant of a transaction."
+                    "You cannot perform any other actions during this phase."
+                )
                 post_purchase_actions[agent] = LLMAction(
                     extra_action=rating_tools,
-                    extra_prompt=""  # Environment observation information will be provided through market_phase="rating"
+                    extra_prompt=buyer_rating_prompt  # Environment observation information will be provided through market_phase="rating"
                 )
         
         if post_purchase_actions:
@@ -456,7 +457,7 @@ async def run_single_simulation(database_path: str):
         for agent_id, agent in agent_graph.get_agents():
             if agent.user_info.profile.get("role") == 'seller':
                 round_summary = get_seller_round_summary(agent_id, round_num, database_path)
-                new_state = get_agent_state(agent_id, 'seller', round_num, database_path) 
+                new_state = get_agent_state(agent_id, 'seller', round_num=round_num, database_path=database_path) 
 
                 # Get actual profit for this round
                 round_profit = (round_summary.get('price', 0) - round_summary.get('cost', 0)) * round_summary.get('sold_numbers', 0)

@@ -664,6 +664,7 @@ async def generate_agent_from_LLM(agents_num:int,
                                 sys_prompt:str, 
                                 user_prompt:str,
                                 role:str,
+                                model: BaseModelBackend,
                                 market_type: str,
                                 agent_graph: AgentGraph = None,
                                 agent_checkpoint_save: bool = True,
@@ -675,12 +676,6 @@ async def generate_agent_from_LLM(agents_num:int,
     else:
         user_trait_list = []
 
-    model = ModelFactory.create(
-        model_type = "gpt-4o-mini",
-        model_platform = ModelPlatformType.OPENAI,
-        api_key = os.getenv("OPENAI_API_KEY"),
-        url = os.getenv("OPENAI_BASE_URL"),
-    )
     generator_agent = ChatAgent(
         model = model,
         system_message = sys_prompt,
