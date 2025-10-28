@@ -22,12 +22,14 @@ class SimulationConfig:
     REENTRY_ALLOWED_ROUND = 5  # Re-entry market allowed rounds
     INITIAL_WINDOW_ROUNDS = [1, 2]  # Initial rounds with hidden complete history
     EXIT_ROUND = 7  # Exit market allowed rounds
-    MARKET_TYPE = 'reputation_only'
+    MARKET_TYPE = 'reputation_and_warrant'
     
     # Model configuration
-    MODEL_PLATFORM = "OPENAI"
+    MODEL_PLATFORM = "openai"
+    # MODEL_PLATFORM = "vllm"
     # MODEL_TYPE = "gpt-4.1-mini-2025-04-14"
     MODEL_TYPE = "gpt-4o-mini"
+    # MODEL_TYPE = "Qwen3-8B"
     
     # Path configuration
     BASE_DATA_PATH = 'experiments'

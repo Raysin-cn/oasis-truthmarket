@@ -351,8 +351,10 @@ async def run_single_simulation(database_path: str):
                 # Conditionally inject additional tools: expose exit/re-enter market actions when allowed
                 if round_num >= SimulationConfig.EXIT_ROUND:
                     listing_tools.append('exit_market')
+                    seller_round_prompt += "\n\nYou are now allowed to exit the market.\n"
                 if round_num == SimulationConfig.REENTRY_ALLOWED_ROUND:
                     listing_tools.append('reenter_market')
+                    seller_round_prompt += "\n\nYou are now allowed to re-enter the market.\n"
 
                 seller_actions[agent] = LLMAction(
                     extra_action=listing_tools,
@@ -378,9 +380,9 @@ async def run_single_simulation(database_path: str):
                 # System prompt already set during SocialAgent instantiation (static parameters)
                 # Prepare round prompt (dynamic parameters)
                 buyer_round_prompt = (
-                    "In this phase, you are only allowed to perform the purchase_product_id action to purchase a product. "
+                    "\n\nIn this phase, you are only allowed to perform the purchase_product_id action to purchase a product. "
                     "Based on the market environment, product information, and your preferences, choose whether and which product to purchase. "
-                    "You cannot perform any other actions during this phase."
+                    "You cannot perform any other actions during this phase.\n"
                 )
                 # Tools available for buyers in purchase phase: only allow purchase
                 purchase_tools = ['purchase_product_id']
@@ -430,9 +432,9 @@ async def run_single_simulation(database_path: str):
                     'seller_reputation': purchase_info.get("seller_reputation", 0)
                 }
                 buyer_rating_prompt = (
-                    "In this phase, you are allowed to perform the rate_transaction action to rate a transaction. " + "Or perform the challenge_warrant action to challenge the warrant of a transaction." if SimulationConfig.MARKET_TYPE == 'reputation_only' else "Or perform the challenge_warrant action to challenge the warrant of a transaction."
+                    "\n\nIn this phase, you are allowed to perform the rate_transaction action to rate a transaction. " + "Or perform the challenge_warrant action to challenge the warrant of a transaction." if SimulationConfig.MARKET_TYPE == 'reputation_only' else "Or perform the challenge_warrant action to challenge the warrant of a transaction."
                     "Based on the market environment, product information, and your preferences, choose whether and which product to rate. " + "Or challenge the warrant of a transaction." if SimulationConfig.MARKET_TYPE == 'reputation_only' else "Or challenge the warrant of a transaction."
-                    "You cannot perform any other actions during this phase."
+                    "You cannot perform any other actions during this phase.\n"
                 )
                 post_purchase_actions[agent] = LLMAction(
                     extra_action=rating_tools,
