@@ -10,3 +10,9 @@ tiktoken==0.7.0
 httpx>=0.28.0
 pillow>=10.1.0
 psutil>=5.9.8
+numpy
+torch
+sentence_transformers
+igraph
+neo4j
+pandas
