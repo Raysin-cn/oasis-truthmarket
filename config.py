@@ -28,7 +28,7 @@ class SimulationConfig:
     MODEL_PLATFORM = "openai"
     # MODEL_PLATFORM = "vllm"
     # MODEL_TYPE = "gpt-4.1-mini-2025-04-14"
-    MODEL_TYPE = "gpt-4o-mini"
+    MODEL_TYPE = "gpt-4o"
     # MODEL_TYPE = "Qwen3-8B"
     
     # Path configuration

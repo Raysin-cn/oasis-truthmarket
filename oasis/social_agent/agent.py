@@ -181,7 +181,7 @@ class SocialAgent(ChatAgent):
             self.add_tools(extra_tool)
         
         try:
-            response = await self.astep(user_msg)
+            response = await self.astep(user_msg) 
             
             # Inject agent_id into return results
             if response.info and 'tool_calls' in response.info and response.info['tool_calls']:  
