@@ -160,37 +160,270 @@ class MultiRunAnalyzer:
         self.aggregated_data = stats
         return stats
     
-    def plot_cross_run_comparison(self, out_dir: str):
-        """Plot cross-run comparison chart"""
+    def _prepare_cross_run_data(self) -> Dict[str, List]:
+        """准备 cross-run 比较分析所需的数据
+        
+        Returns:
+            包含所有分析数据的字典，如果没有数据则返回空字典
+        """
         if not self.run_data:
-            return
+            return {}
         
         # Prepare data
         run_ids = []
         seller_profits = []
+        honest_profits = []  # 诚实收益（绿色）
+        dishonest_profits = []  # 不诚实收益（红色）
         buyer_utilities = []
+        honest_buyer_utilities = []  # 诚实交易的 buyer utility（绿色）
+        dishonest_buyer_utilities = []  # 不诚实交易的 buyer utility（红色）
         transaction_counts = []
+        honest_transaction_counts = []  # 诚实交易数量（绿色）
+        dishonest_transaction_counts = []  # 不诚实交易数量（红色）
         
         for run_id, data in self.run_data.items():
             transactions = data['transactions']
+            posts = data.get('post', pd.DataFrame())
+            
             if not transactions.empty:
                 run_ids.append(run_id)
-                seller_profits.append(transactions['seller_profit'].sum())
-                buyer_utilities.append(transactions['buyer_utility'].sum())
-                transaction_counts.append(len(transactions))
+                
+                # 关联 transactions 和 post 表来区分 honest 和 dishonest 收益
+                if not posts.empty and 'post_id' in transactions.columns:
+                    # 合并数据以获取 advertised_quality 和 true_quality
+                    merged = transactions.merge(
+                        posts[['post_id', 'advertised_quality', 'true_quality']],
+                        on='post_id',
+                        how='left'
+                    )
+                    
+                    # 识别 dishonest 交易：advertised_quality == 'HQ' 且 true_quality == 'LQ'
+                    # 处理可能的 NaN 值
+                    dishonest_mask = (
+                        (merged['advertised_quality'] == 'HQ') & 
+                        (merged['true_quality'] == 'LQ')
+                    )
+                    
+                    # 计算 dishonest 和 honest seller 收益（使用 fillna(0) 处理缺失值）
+                    dishonest_profit = merged[dishonest_mask]['seller_profit'].fillna(0).sum()
+                    honest_profit = merged[~dishonest_mask]['seller_profit'].fillna(0).sum()
+                    
+                    # 计算 dishonest 和 honest buyer utility（使用 fillna(0) 处理缺失值）
+                    dishonest_buyer_utility = merged[dishonest_mask]['buyer_utility'].fillna(0).sum()
+                    honest_buyer_utility = merged[~dishonest_mask]['buyer_utility'].fillna(0).sum()
+                    
+                    # 计算 dishonest 和 honest 交易数量
+                    dishonest_transaction_count = len(merged[dishonest_mask])
+                    honest_transaction_count = len(merged[~dishonest_mask])
+                else:
+                    # 如果无法关联，使用默认值
+                    honest_profit = transactions['seller_profit'].fillna(0).sum()
+                    dishonest_profit = 0
+                    honest_buyer_utility = transactions['buyer_utility'].fillna(0).sum()
+                    dishonest_buyer_utility = 0
+                    honest_transaction_count = len(transactions)
+                    dishonest_transaction_count = 0
+                
+                honest_profits.append(honest_profit)
+                dishonest_profits.append(dishonest_profit)
+                seller_profits.append(honest_profit + dishonest_profit)
+                honest_buyer_utilities.append(honest_buyer_utility)
+                dishonest_buyer_utilities.append(dishonest_buyer_utility)
+                buyer_utilities.append(honest_buyer_utility + dishonest_buyer_utility)
+                honest_transaction_counts.append(honest_transaction_count)
+                dishonest_transaction_counts.append(dishonest_transaction_count)
+                transaction_counts.append(honest_transaction_count + dishonest_transaction_count)
         
         if not run_ids:
+            return {}
+        
+        return {
+            'run_ids': run_ids,
+            'seller_profits': seller_profits,
+            'honest_profits': honest_profits,
+            'dishonest_profits': dishonest_profits,
+            'buyer_utilities': buyer_utilities,
+            'honest_buyer_utilities': honest_buyer_utilities,
+            'dishonest_buyer_utilities': dishonest_buyer_utilities,
+            'transaction_counts': transaction_counts,
+            'honest_transaction_counts': honest_transaction_counts,
+            'dishonest_transaction_counts': dishonest_transaction_counts
+        }
+    
+    def plot_seller_profits_comparison(self, out_dir: str):
+        """绘制 Seller Profits 堆叠柱状图"""
+        data = self._prepare_cross_run_data()
+        if not data:
             return
+        
+        run_ids = data['run_ids']
+        honest_profits = data['honest_profits']
+        dishonest_profits = data['dishonest_profits']
+        seller_profits = data['seller_profits']
+        
+        fig, ax = plt.subplots(figsize=(8, 6))
+        fig.suptitle(f'Seller Profits Comparison - Experiment {self.experiment_id}', fontsize=14)
+        
+        # 先绘制 honest 收益（绿色，底层）
+        ax.bar(run_ids, honest_profits, alpha=0.7, color='green', label='Honest Profit')
+        # 再绘制 dishonest 收益（红色，堆叠在顶层）
+        ax.bar(run_ids, dishonest_profits, bottom=honest_profits, alpha=0.7, color='red', label='Dishonest Profit')
+        
+        # 添加三条平均值线：Honest Mean, Dishonest Mean, Total Mean
+        honest_mean = np.mean(honest_profits)
+        dishonest_mean = np.mean(dishonest_profits)
+        total_mean = np.mean(seller_profits)
+        # Honest Mean 显示在底部（honest 部分的平均值）
+        ax.axhline(y=honest_mean, color='darkgreen', linestyle='--', linewidth=1.5,
+                   label=f'Honest Mean: {honest_mean:.2f}')
+        # Dishonest Mean 显示在 dishonest_mean 的绝对值位置（从0开始的坐标）
+        ax.axhline(y=dishonest_mean, color='darkred', linestyle='--', linewidth=1.5,
+                   label=f'Dishonest Mean: {dishonest_mean:.2f}')
+        # Total Mean 显示在顶部（总和位置）
+        ax.axhline(y=total_mean, color='blue', linestyle='--', linewidth=1.5,
+                   label=f'Total Mean: {total_mean:.2f}')
+        
+        ax.set_title('Total Seller Profits (Honest vs Dishonest)')
+        ax.set_xlabel('Run ID')
+        ax.set_ylabel('Total Profit')
+        ax.set_ylim(0, 200)
+        ax.legend()
+        ax.grid(True, alpha=0.3)
+        
+        plot_save(fig, out_dir, 'seller_profits_comparison')
+    
+    def plot_buyer_utilities_comparison(self, out_dir: str):
+        """绘制 Buyer Utilities 柱状图"""
+        data = self._prepare_cross_run_data()
+        if not data:
+            return
+        
+        run_ids = data['run_ids']
+        buyer_utilities = data['buyer_utilities']
+        
+        fig, ax = plt.subplots(figsize=(8, 6))
+        fig.suptitle(f'Buyer Utilities Comparison - Experiment {self.experiment_id}', fontsize=14)
+        
+        ax.bar(run_ids, buyer_utilities, alpha=0.7, color='lightgreen')
+        ax.axhline(y=np.mean(buyer_utilities), color='red', linestyle='--',
+                   label=f'Mean: {np.mean(buyer_utilities):.2f}')
+        ax.set_title('Total Buyer Utilities')
+        ax.set_xlabel('Run ID')
+        ax.set_ylabel('Total Utility')
+        ax.set_ylim(0, 220)
+        ax.legend()
+        ax.grid(True, alpha=0.3)
+        
+        plot_save(fig, out_dir, 'buyer_utilities_comparison')
+    
+    def plot_transaction_counts_comparison(self, out_dir: str):
+        """绘制 Transaction Counts 堆叠柱状图"""
+        data = self._prepare_cross_run_data()
+        if not data:
+            return
+        
+        run_ids = data['run_ids']
+        honest_transaction_counts = data['honest_transaction_counts']
+        dishonest_transaction_counts = data['dishonest_transaction_counts']
+        transaction_counts = data['transaction_counts']
+        
+        fig, ax = plt.subplots(figsize=(8, 6))
+        fig.suptitle(f'Transaction Counts Comparison - Experiment {self.experiment_id}', fontsize=14)
+        
+        # 先绘制 honest 交易数量（绿色，底层）
+        ax.bar(run_ids, honest_transaction_counts, alpha=0.7, color='green', label='Honest Transactions')
+        # 再绘制 dishonest 交易数量（红色，堆叠在顶层）
+        ax.bar(run_ids, dishonest_transaction_counts, bottom=honest_transaction_counts, alpha=0.7, color='red', label='Dishonest Transactions')
+        
+        # 添加三条平均值线：Honest Mean, Dishonest Mean, Total Mean
+        honest_mean_transactions = np.mean(honest_transaction_counts)
+        dishonest_mean_transactions = np.mean(dishonest_transaction_counts)
+        total_mean_transactions = np.mean(transaction_counts)
+        # Honest Mean 显示在底部（honest 部分的平均值）
+        ax.axhline(y=honest_mean_transactions, color='darkgreen', linestyle='--', linewidth=1.5,
+                   label=f'Honest Mean: {honest_mean_transactions:.1f}')
+        # Dishonest Mean 显示在 dishonest_mean_transactions 的绝对值位置（从0开始的坐标）
+        ax.axhline(y=dishonest_mean_transactions, color='darkred', linestyle='--', linewidth=1.5,
+                   label=f'Dishonest Mean: {dishonest_mean_transactions:.1f}')
+        # Total Mean 显示在顶部（总和位置）
+        ax.axhline(y=total_mean_transactions, color='blue', linestyle='--', linewidth=1.5,
+                   label=f'Total Mean: {total_mean_transactions:.1f}')
+        
+        ax.set_title('Transaction Counts (Honest vs Dishonest)')
+        ax.set_xlabel('Run ID')
+        ax.set_ylabel('Number of Transactions')
+        ax.set_ylim(0, max(transaction_counts) * 1.1 if transaction_counts else 200)
+        ax.legend()
+        ax.grid(True, alpha=0.3)
+        
+        plot_save(fig, out_dir, 'transaction_counts_comparison')
+    
+    def plot_profit_vs_utility_scatter(self, out_dir: str):
+        """绘制 Seller Profits vs Buyer Utilities 散点图"""
+        data = self._prepare_cross_run_data()
+        if not data:
+            return
+        
+        run_ids = data['run_ids']
+        seller_profits = data['seller_profits']
+        buyer_utilities = data['buyer_utilities']
+        
+        fig, ax = plt.subplots(figsize=(8, 6))
+        fig.suptitle(f'Profit vs Utility Scatter - Experiment {self.experiment_id}', fontsize=14)
+        
+        ax.scatter(seller_profits, buyer_utilities, alpha=0.7, s=60)
+        ax.set_title('Seller Profits vs Buyer Utilities')
+        ax.set_xlabel('Total Seller Profit')
+        ax.set_ylabel('Total Buyer Utility')
+        ax.set_xlim(0, max(seller_profits) * 1.1 if seller_profits else 200)
+        ax.set_ylim(0, max(buyer_utilities) * 1.1 if buyer_utilities else 200)
+        ax.grid(True, alpha=0.3)
+        
+        # Add run ID labels
+        for i, run_id in enumerate(run_ids):
+            ax.annotate(f'R{run_id}', (seller_profits[i], buyer_utilities[i]), 
+                       xytext=(5, 5), textcoords='offset points', fontsize=8)
+        
+        plot_save(fig, out_dir, 'profit_vs_utility_scatter')
+    
+    def plot_cross_run_comparison(self, out_dir: str):
+        """Plot cross-run comparison chart (组合图)"""
+        data = self._prepare_cross_run_data()
+        if not data:
+            return
+        
+        run_ids = data['run_ids']
+        seller_profits = data['seller_profits']
+        honest_profits = data['honest_profits']
+        dishonest_profits = data['dishonest_profits']
+        buyer_utilities = data['buyer_utilities']
+        transaction_counts = data['transaction_counts']
+        honest_transaction_counts = data['honest_transaction_counts']
+        dishonest_transaction_counts = data['dishonest_transaction_counts']
         
         # Create plots
         fig, axes = plt.subplots(2, 2, figsize=(12, 10))
         fig.suptitle(f'Cross-Run Comparison Analysis - Experiment {self.experiment_id}', fontsize=14)
         
-        # 1. Seller total profit comparison
-        axes[0, 0].bar(run_ids, seller_profits, alpha=0.7, color='skyblue')
-        axes[0, 0].axhline(y=np.mean(seller_profits), color='red', linestyle='--', 
-                          label=f'Mean: {np.mean(seller_profits):.2f}')
-        axes[0, 0].set_title('Total Seller Profits')
+        # 1. Seller total profit comparison (堆叠图)
+        # 先绘制 honest 收益（绿色，底层）
+        axes[0, 0].bar(run_ids, honest_profits, alpha=0.7, color='green', label='Honest Profit')
+        # 再绘制 dishonest 收益（红色，堆叠在顶层）
+        axes[0, 0].bar(run_ids, dishonest_profits, bottom=honest_profits, alpha=0.7, color='red', label='Dishonest Profit')
+        # 添加三条平均值线：Honest Mean, Dishonest Mean, Total Mean
+        honest_mean = np.mean(honest_profits)
+        dishonest_mean = np.mean(dishonest_profits)
+        total_mean = np.mean(seller_profits)
+        # Honest Mean 显示在底部（honest 部分的平均值）
+        axes[0, 0].axhline(y=honest_mean, color='darkgreen', linestyle='--', linewidth=1.5,
+                          label=f'Honest Mean: {honest_mean:.2f}')
+        # Dishonest Mean 显示在 dishonest_mean 的绝对值位置（从0开始的坐标）
+        axes[0, 0].axhline(y=dishonest_mean, color='darkred', linestyle='--', linewidth=1.5,
+                          label=f'Dishonest Mean: {dishonest_mean:.2f}')
+        # Total Mean 显示在顶部（总和位置）
+        axes[0, 0].axhline(y=total_mean, color='blue', linestyle='--', linewidth=1.5,
+                          label=f'Total Mean: {total_mean:.2f}')
+        axes[0, 0].set_title('Total Seller Profits (Honest vs Dishonest)')
         axes[0, 0].set_xlabel('Run ID')
         axes[0, 0].set_ylabel('Total Profit')
         axes[0, 0].set_ylim(0, 200)
@@ -204,18 +437,32 @@ class MultiRunAnalyzer:
         axes[0, 1].set_title('Total Buyer Utilities')
         axes[0, 1].set_xlabel('Run ID')
         axes[0, 1].set_ylabel('Total Utility')
-        axes[0, 1].set_ylim(0, 200)
+        axes[0, 1].set_ylim(0, 220)
         axes[0, 1].legend()
         axes[0, 1].grid(True, alpha=0.3)
         
-        # 3. Transaction count comparison
-        axes[1, 0].bar(run_ids, transaction_counts, alpha=0.7, color='orange')
-        axes[1, 0].axhline(y=np.mean(transaction_counts), color='red', linestyle='--',
-                          label=f'Mean: {np.mean(transaction_counts):.1f}')
-        axes[1, 0].set_title('Transaction Counts')
+        # 3. Transaction count comparison (堆叠图)
+        # 先绘制 honest 交易数量（绿色，底层）
+        axes[1, 0].bar(run_ids, honest_transaction_counts, alpha=0.7, color='green', label='Honest Transactions')
+        # 再绘制 dishonest 交易数量（红色，堆叠在顶层）
+        axes[1, 0].bar(run_ids, dishonest_transaction_counts, bottom=honest_transaction_counts, alpha=0.7, color='red', label='Dishonest Transactions')
+        # 添加三条平均值线：Honest Mean, Dishonest Mean, Total Mean
+        honest_mean_transactions = np.mean(honest_transaction_counts)
+        dishonest_mean_transactions = np.mean(dishonest_transaction_counts)
+        total_mean_transactions = np.mean(transaction_counts)
+        # Honest Mean 显示在底部（honest 部分的平均值）
+        axes[1, 0].axhline(y=honest_mean_transactions, color='darkgreen', linestyle='--', linewidth=1.5,
+                          label=f'Honest Mean: {honest_mean_transactions:.1f}')
+        # Dishonest Mean 显示在 dishonest_mean_transactions 的绝对值位置（从0开始的坐标）
+        axes[1, 0].axhline(y=dishonest_mean_transactions, color='darkred', linestyle='--', linewidth=1.5,
+                          label=f'Dishonest Mean: {dishonest_mean_transactions:.1f}')
+        # Total Mean 显示在顶部（总和位置）
+        axes[1, 0].axhline(y=total_mean_transactions, color='blue', linestyle='--', linewidth=1.5,
+                          label=f'Total Mean: {total_mean_transactions:.1f}')
+        axes[1, 0].set_title('Transaction Counts (Honest vs Dishonest)')
         axes[1, 0].set_xlabel('Run ID')
         axes[1, 0].set_ylabel('Number of Transactions')
-        axes[1, 0].set_ylim(0, 200)
+        axes[1, 0].set_ylim(0, max(transaction_counts) * 1.1 if transaction_counts else 200)
         axes[1, 0].legend()
         axes[1, 0].grid(True, alpha=0.3)
         
@@ -224,8 +471,8 @@ class MultiRunAnalyzer:
         axes[1, 1].set_title('Seller Profits vs Buyer Utilities')
         axes[1, 1].set_xlabel('Total Seller Profit')
         axes[1, 1].set_ylabel('Total Buyer Utility')
-        axes[1, 1].set_xlim(0, 200)
-        axes[1, 1].set_ylim(0, 200)
+        axes[1, 1].set_xlim(0, max(seller_profits) * 1.1 if seller_profits else 200)
+        axes[1, 1].set_ylim(0, max(buyer_utilities) * 1.1 if buyer_utilities else 200)
         axes[1, 1].grid(True, alpha=0.3)
         
         # Add run ID labels
@@ -607,7 +854,14 @@ async def analyze_experiment(experiment_id: str):
     print(f"Generating aggregate visualizations to: {aggregated_dir}")
     
     sns.set_theme(style="whitegrid")
+    # 组合图
     analyzer.plot_cross_run_comparison(aggregated_dir)
+    # 单独图表
+    analyzer.plot_seller_profits_comparison(aggregated_dir)
+    analyzer.plot_buyer_utilities_comparison(aggregated_dir)
+    analyzer.plot_transaction_counts_comparison(aggregated_dir)
+    analyzer.plot_profit_vs_utility_scatter(aggregated_dir)
+    # 其他分析图表
     analyzer.plot_round_progression(aggregated_dir)
     analyzer.plot_distribution_analysis(aggregated_dir)
     analyzer.plot_seller_deception_analysis(aggregated_dir)
