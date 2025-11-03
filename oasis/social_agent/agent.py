@@ -167,8 +167,8 @@ class SocialAgent(ChatAgent):
             user_msg_content += f"\n\n## Additional Information:\n{extra_prompt}"
         user_msg_content += (
             "\n## Notice:\n"
-            "You must execute your action by calling a tool using the tool_call format. "
-            "Do not answer directly in natural language; always select and call a tool for your action."
+            "You must use the tool_call format to invoke the tool to perform the operation."
+            "When you execute a tool_call, you also need to explain your reasoning."
         )
 
         user_msg = BaseMessage.make_user_message(
@@ -182,6 +182,7 @@ class SocialAgent(ChatAgent):
         
         try:
             response = await self.astep(user_msg) 
+            action_reasoning = response.msg.content
             
             # Inject agent_id into return results
             if response.info and 'tool_calls' in response.info and response.info['tool_calls']:  
@@ -192,7 +193,8 @@ class SocialAgent(ChatAgent):
                     if isinstance(tool_call.result, dict):
                         tool_call.result['agent_id'] = self.social_agent_id
                     agent_log.info(f"Agent {self.social_agent_id} performed "
-                                f"action: {action_name} with args: {args}")
+                                f"action: {action_name} with args: {args}"
+                                f"and reasoning: {action_reasoning}")
             else:
                 agent_log.warning(f"Agent {self.social_agent_id} did not perform any action.")
 
