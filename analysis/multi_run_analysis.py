@@ -193,6 +193,7 @@ class MultiRunAnalyzer:
         axes[0, 0].set_title('Total Seller Profits')
         axes[0, 0].set_xlabel('Run ID')
         axes[0, 0].set_ylabel('Total Profit')
+        axes[0, 0].set_ylim(0, 200)
         axes[0, 0].legend()
         axes[0, 0].grid(True, alpha=0.3)
         
@@ -203,6 +204,7 @@ class MultiRunAnalyzer:
         axes[0, 1].set_title('Total Buyer Utilities')
         axes[0, 1].set_xlabel('Run ID')
         axes[0, 1].set_ylabel('Total Utility')
+        axes[0, 1].set_ylim(0, 200)
         axes[0, 1].legend()
         axes[0, 1].grid(True, alpha=0.3)
         
@@ -213,6 +215,7 @@ class MultiRunAnalyzer:
         axes[1, 0].set_title('Transaction Counts')
         axes[1, 0].set_xlabel('Run ID')
         axes[1, 0].set_ylabel('Number of Transactions')
+        axes[1, 0].set_ylim(0, 200)
         axes[1, 0].legend()
         axes[1, 0].grid(True, alpha=0.3)
         
@@ -221,6 +224,8 @@ class MultiRunAnalyzer:
         axes[1, 1].set_title('Seller Profits vs Buyer Utilities')
         axes[1, 1].set_xlabel('Total Seller Profit')
         axes[1, 1].set_ylabel('Total Buyer Utility')
+        axes[1, 1].set_xlim(0, 200)
+        axes[1, 1].set_ylim(0, 200)
         axes[1, 1].grid(True, alpha=0.3)
         
         # Add run ID labels
@@ -308,6 +313,7 @@ class MultiRunAnalyzer:
         axes[0, 0].set_title('Total Seller Profits Distribution')
         axes[0, 0].set_xlabel('Total Profit')
         axes[0, 0].set_ylabel('Frequency')
+        axes[0, 0].set_ylim(0, 10)
         axes[0, 0].legend()
         axes[0, 0].grid(True, alpha=0.3)
         
@@ -318,6 +324,7 @@ class MultiRunAnalyzer:
         axes[0, 1].set_title('Total Buyer Utilities Distribution')
         axes[0, 1].set_xlabel('Total Utility')
         axes[0, 1].set_ylabel('Frequency')
+        axes[0, 1].set_ylim(0, 10)
         axes[0, 1].legend()
         axes[0, 1].grid(True, alpha=0.3)
         
@@ -328,6 +335,7 @@ class MultiRunAnalyzer:
         axes[0, 2].set_title('Transaction Counts Distribution')
         axes[0, 2].set_xlabel('Number of Transactions')
         axes[0, 2].set_ylabel('Frequency')
+        axes[0, 2].set_ylim(0, 10)
         axes[0, 2].legend()
         axes[0, 2].grid(True, alpha=0.3)
         
@@ -335,16 +343,19 @@ class MultiRunAnalyzer:
         axes[1, 0].boxplot(all_seller_profits, labels=['Seller Profits'])
         axes[1, 0].set_title('Seller Profits Box Plot')
         axes[1, 0].set_ylabel('Total Profit')
+        axes[1, 0].set_ylim(0, 10)
         axes[1, 0].grid(True, alpha=0.3)
         
         axes[1, 1].boxplot(all_buyer_utilities, labels=['Buyer Utilities'])
         axes[1, 1].set_title('Buyer Utilities Box Plot')
         axes[1, 1].set_ylabel('Total Utility')
+        axes[1, 1].set_ylim(0, 10)
         axes[1, 1].grid(True, alpha=0.3)
         
         axes[1, 2].boxplot(all_transaction_counts, labels=['Transaction Counts'])
         axes[1, 2].set_title('Transaction Counts Box Plot')
         axes[1, 2].set_ylabel('Number of Transactions')
+        axes[1, 2].set_ylim(0, 10)
         axes[1, 2].grid(True, alpha=0.3)
         
         plot_save(fig, out_dir, 'distribution_analysis')
@@ -453,6 +464,7 @@ class MultiRunAnalyzer:
         axes[0, 0].set_title('Total Deception Cases per Run', fontweight='bold')
         axes[0, 0].set_xlabel('Run ID')
         axes[0, 0].set_ylabel('Number of Deceptions')
+        axes[0, 0].set_ylim(0, 24)
         axes[0, 0].legend()
         axes[0, 0].grid(True, alpha=0.3, axis='y')
         
@@ -464,6 +476,7 @@ class MultiRunAnalyzer:
                             fontweight='bold')
         axes[0, 1].set_xlabel('Deception Rate')
         axes[0, 1].set_ylabel('Frequency (Number of Runs)')
+        axes[0, 1].set_ylim(0, 12)
         axes[0, 1].legend()
         axes[0, 1].grid(True, alpha=0.3, axis='y')
         
@@ -473,6 +486,7 @@ class MultiRunAnalyzer:
         axes[1, 0].scatter(range(len(run_ids)), total_deceptions, alpha=0.6, s=50, color='darkblue')
         axes[1, 0].set_title('Deception Cases Box Plot', fontweight='bold')
         axes[1, 0].set_ylabel('Number of Deceptions')
+        axes[1, 0].set_ylim(0, 12)
         axes[1, 0].grid(True, alpha=0.3, axis='y')
         
         # 4. Statistics panel
@@ -609,7 +623,7 @@ def main():
     """Command-line entry point"""
     import argparse
     parser = argparse.ArgumentParser(description='Analyze multi-run experiment results')
-    parser.add_argument('--experiment_id', help='Experiment ID', default='experiment_20251027_154200')
+    parser.add_argument('--experiment_id', help='Experiment ID', default='experiment_20251103_102825')
     args = parser.parse_args()
     
     asyncio.run(analyze_experiment(args.experiment_id))

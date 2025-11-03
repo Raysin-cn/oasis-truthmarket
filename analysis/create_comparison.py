@@ -16,6 +16,7 @@ deliberate misrepresentation of product quality by sellers.
 
 import json
 import matplotlib.pyplot as plt
+import matplotlib.ticker as mticker
 import seaborn as sns
 import numpy as np
 import pandas as pd
@@ -30,8 +31,8 @@ sns.set_theme(style="whitegrid")
 
 # Configuration - Unified experiment IDs
 EXPERIMENT_CONFIG = {
-    'reputation_only': "experiment_20251019_171638",
-    'reputation_warrant': "experiment_20251016_053302"
+    'reputation_only': "experiment_20251103_104146",
+    'reputation_warrant': "experiment_20251103_102825"
 }
 
 def create_output_directory():
@@ -285,7 +286,11 @@ def create_comparison_summary(output_dir):
     return output_path
 
 def create_round_progression_comparison(output_dir):
-    """Create round-by-round progression comparison chart"""
+    """Create round-by-round progression comparison chart
+    
+    Creates a single chart showing Consumer Utility and Producer Profit 
+    for both market types across rounds, matching the reference style.
+    """
     rep_only = load_experiment_data(EXPERIMENT_CONFIG['reputation_only'])
     rep_warrant = load_experiment_data(EXPERIMENT_CONFIG['reputation_warrant'])
     
@@ -300,36 +305,69 @@ def create_round_progression_comparison(output_dir):
     rep_warrant_buyer = [rep_warrant['round_stats'][str(r)]['avg_buyer_utility'] for r in common_rounds]
     rep_warrant_seller = [rep_warrant['round_stats'][str(r)]['avg_seller_profit'] for r in common_rounds]
     
-    # Create chart
-    fig, axes = plt.subplots(1, 2, figsize=(14, 6))
-    fig.suptitle('Round-by-Round Progression Comparison', fontsize=16, fontweight='bold')
+    # Create single chart with all four lines
+    fig, ax = plt.subplots(1, 1, figsize=(12, 8))
+    fig.suptitle('Consumer Utility and Producer Profit by Round for each Market Type', 
+                 fontsize=16, fontweight='bold')
     
-    # Buyer utility progression
-    axes[0].plot(common_rounds, rep_only_buyer, 'o-', label='Reputation-Only', 
-                linewidth=3, markersize=8, color='#ff6b6b')
-    axes[0].plot(common_rounds, rep_warrant_buyer, 's-', label='Reputation+Warrant', 
-                linewidth=3, markersize=8, color='#4ecdc4')
-    axes[0].set_title('Average Buyer Utility by Round', fontweight='bold')
-    axes[0].set_xlabel('Round')
-    axes[0].set_ylabel('Average Buyer Utility')
-    axes[0].legend()
-    axes[0].grid(True, alpha=0.3)
-    axes[0].axhline(y=0, color='black', linestyle='--', alpha=0.5)
+    # Set background color (light blue/grey)
+    ax.set_facecolor('#F0F8FF')  # Alice blue / very light blue-grey
+    fig.patch.set_facecolor('white')
     
-    # Seller profit progression
-    axes[1].plot(common_rounds, rep_only_seller, 'o-', label='Reputation-Only', 
-                linewidth=3, markersize=8, color='#ff6b6b')
-    axes[1].plot(common_rounds, rep_warrant_seller, 's-', label='Reputation+Warrant', 
-                linewidth=3, markersize=8, color='#4ecdc4')
-    axes[1].set_title('Average Seller Profit by Round', fontweight='bold')
-    axes[1].set_xlabel('Round')
-    axes[1].set_ylabel('Average Seller Profit')
-    axes[1].legend()
-    axes[1].grid(True, alpha=0.3)
+    # Plot Utility (Reputation Market) - orange solid line with circular markers
+    ax.plot(common_rounds, rep_only_buyer, 'o-', 
+            label='Utility (Reputation Market)', 
+            linewidth=2.5, markersize=7, color='#FF8C42', markerfacecolor='#FF8C42', 
+            markeredgewidth=1.5, markeredgecolor='#FF8C42')
+    
+    # Plot Utility (Warrant Market) - light orange/yellow dashed line with circular markers
+    ax.plot(common_rounds, rep_warrant_buyer, 'o--', 
+            label='Utility (Warrant Market)', 
+            linewidth=2.5, markersize=7, color='#FFD93D', markerfacecolor='#FFD93D',
+            markeredgewidth=1.5, markeredgecolor='#FFD93D', dashes=(8, 4))
+    
+    # Plot Profit (Reputation Market) - dark red solid line with circular markers
+    ax.plot(common_rounds, rep_only_seller, 'o-', 
+            label='Profit (Reputation Market)', 
+            linewidth=2.5, markersize=7, color='#8B0000', markerfacecolor='#8B0000',
+            markeredgewidth=1.5, markeredgecolor='#8B0000')
+    
+    # Plot Profit (Warrant Market) - red dashed line with circular markers
+    ax.plot(common_rounds, rep_warrant_seller, 'o--', 
+            label='Profit (Warrant Market)', 
+            linewidth=2.5, markersize=7, color='#DC143C', markerfacecolor='#DC143C',
+            markeredgewidth=1.5, markeredgecolor='#DC143C', dashes=(8, 4))
+    
+    # Format x-axis labels as "Round 1", "Round 2", etc.
+    ax.set_xticks(common_rounds)
+    ax.set_xticklabels([f'Round {r}' for r in common_rounds])
+    
+    # Set y-axis range (0 to max value, with some padding)
+    all_values = rep_only_buyer + rep_only_seller + rep_warrant_buyer + rep_warrant_seller
+    max_val = max(all_values) if all_values else 60
+    min_val = min(all_values) if all_values else 0
+    y_max = max(60, max_val * 1.1)  # At least 60 or 10% above max
+    y_min = min(0, min_val * 1.1) if min_val < 0 else 0
+    ax.set_ylim(y_min, y_max)
+    
+    # Add horizontal grid lines
+    ax.grid(True, alpha=0.3, axis='y', linestyle='-', linewidth=0.5)
+    ax.grid(True, alpha=0.2, axis='x', linestyle='--', linewidth=0.3)
+    
+    # Set y-axis major ticks
+    if y_max <= 60:
+        ax.set_yticks([0, 20, 40, 60])
+    else:
+        # Auto-generate reasonable ticks
+        ax.yaxis.set_major_locator(mticker.MaxNLocator(nbins=6))
+    
+    # Add legend outside the plot (to the right of the plot)
+    ax.legend(loc='center left', bbox_to_anchor=(1.02, 0.5), fontsize=10, 
+              framealpha=0.9, edgecolor='gray', fancybox=True)
     
     plt.tight_layout()
     output_path = output_dir / 'market_mechanism_round_progression.png'
-    plt.savefig(output_path, dpi=300, bbox_inches='tight')
+    plt.savefig(output_path, dpi=300, bbox_inches='tight', facecolor='white')
     plt.close()
     return output_path
 
