@@ -25,3 +25,9 @@ pandas>=2.0.0
 
 # Environment
 python-dotenv>=1.0.0
+numpy
+torch
+sentence_transformers
+igraph
+neo4j
+pandas
