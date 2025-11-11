@@ -71,7 +71,7 @@ class SocialAction:
         response = await self.channel.read_from_send_queue(message_id)
         return response[2]
 
-    async def sign_up(self, user_name: str, name: str, bio: str):
+    async def sign_up(self, user_name: str, name: str, bio: str, initial_budget: float):
         r"""Signs up a new user with the provided username, name, and bio.
 
         This method prepares a user message comprising the user's details and
@@ -96,7 +96,7 @@ class SocialAction:
 
         # print(f"Agent {self.agent_id} is signing up with "
         #       f"user_name: {user_name}, name: {name}, bio: {bio}")
-        user_message = (user_name, name, bio)
+        user_message = (user_name, name, bio, initial_budget)
         return await self.perform_action(user_message, ActionType.SIGNUP.value)
 
     async def refresh(self):
@@ -803,14 +803,16 @@ class SocialAction:
         """
         return await self.perform_action(post_id, ActionType.PURCHASE_PRODUCT_ID.value)
 
-    async def challenge_warrant(self, post_id: int):
+    async def challenge_warrant(self, transaction_id: int, rating: int):
         """
         Challenges the warrant of a previously purchased product. This should be done if you suspect the advertised quality does not match the true quality.
 
         Args:
-            post_id (int): The unique identifier of the product whose warrant is being challenged.
+            transaction_id (int): The unique identifier of the transaction whose warrant is being challenged.
+            rating (int): The rating to give. Use an integer in the range [-2, -1, 0, 1, 2], where -2 means very bad, -1 means bad, 0 means neutral, 1 means good, and 2 means very good.
         """
-        return await self.perform_action(post_id, ActionType.CHALLENGE_WARRANT.value)
+        rating_details = {"transaction_id": transaction_id, "rating": rating}
+        return await self.perform_action(rating_details, ActionType.CHALLENGE_WARRANT.value)
 
     async def rate_transaction(self, transaction_id: int, rating: int):
         """

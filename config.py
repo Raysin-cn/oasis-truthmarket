@@ -16,20 +16,32 @@ class SimulationConfig:
     NUM_SELLERS = 10
     NUM_BUYERS = 10
     SIMULATION_ROUNDS = 7
-    
+
+    # Market parameters
+    MARKET_PARAMS = {  #TODO: Maybe it needs to be modified because it doesn't match Payoff Matrix.
+        "hq_cost": 2.0,
+        "lq_cost": 1.0,
+        "hq_price": 5.0,
+        "lq_price": 3.0,
+        "hq_utility": 8.0,
+        "lq_utility": 5.0,
+        "warrant_escrow": 2.0,
+        "challenge_cost": 1.0,
+    }
+
     # Market rule parameters
     REPUTATION_LAG = 1  # Reputation lag display rounds
     REENTRY_ALLOWED_ROUND = 5  # Re-entry market allowed rounds
     INITIAL_WINDOW_ROUNDS = [1, 2]  # Initial rounds with hidden complete history
     EXIT_ROUND = 7  # Exit market allowed rounds
-    MARKET_TYPE = 'reputation_and_warrant'
+    MARKET_TYPE = 'reputation_only'
     
     # Model configuration
     MODEL_PLATFORM = "openai"
     # MODEL_PLATFORM = "vllm"
-    # MODEL_TYPE = "gpt-4.1-mini-2025-04-14"
-    # MODEL_TYPE = "gpt-4o"
-    MODEL_TYPE = "MiniMax-M2"
+    # MODEL_TYPE = "gpt-4o-mini"
+    MODEL_TYPE = "gpt-4o"
+    # MODEL_TYPE = "MiniMax-M2"
     # MODEL_TYPE = "Qwen3-8B"
     
     # Path configuration

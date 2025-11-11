@@ -75,7 +75,7 @@ class SocialAgent(ChatAgent):
         self.env = SocialEnvironment(SocialAction(agent_id, self.channel), db_path=db_path)
         
         # Agent state attributes
-        self.current_budget = 100.0  # Seller initial budget
+        self.initial_budget = 10  # Seller and Buyer initial budget in simulation
         self.reputation_score = 0    # Seller reputation
         self.cumulative_utility = 0  # Buyer cumulative utility
         self.history_summary = "This is the first round. You have no past performance data."
@@ -167,7 +167,7 @@ class SocialAgent(ChatAgent):
             user_msg_content += f"\n\n## Additional Information:\n{extra_prompt}"
         user_msg_content += (
             "\n## Notice:\n"
-            "You must use the tool_call format to invoke the tool to perform the operation."
+            "You must use the `tool_call` to invoke the tool to perform the operation."
             "When you execute a tool_call, you also need to explain your reasoning."
         )
 
@@ -179,7 +179,8 @@ class SocialAgent(ChatAgent):
         if extra_action:
             extra_tool = [self.all_possible_actions_dict[extra_action_name] for extra_action_name in extra_action]
             self.add_tools(extra_tool)
-        
+            
+        action_reasoning = ""
         try:
             response = await self.astep(user_msg) 
             action_reasoning = response.msg.content
@@ -196,7 +197,7 @@ class SocialAgent(ChatAgent):
                                 f"action: {action_name} with args: {args}"
                                 f"and reasoning: {action_reasoning}")
             else:
-                agent_log.warning(f"Agent {self.social_agent_id} did not perform any action.")
+                agent_log.warning(f"Agent {self.social_agent_id} did not perform any action. Reasoning: {action_reasoning}")
 
         except Exception as e:
             agent_log.error(f"Agent {self.social_agent_id} error: {e}")
@@ -206,7 +207,7 @@ class SocialAgent(ChatAgent):
             if extra_action:
                 self.remove_tools(extra_action)
                 
-            return response
+            return response, action_reasoning
 
     async def perform_action_by_llm(self, extra_action: List[Union[FunctionTool, Callable]] = None):
         """

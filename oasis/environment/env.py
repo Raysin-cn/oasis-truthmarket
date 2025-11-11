@@ -171,6 +171,8 @@ class OasisEnv:
 
         # Execute all tasks and extract, return result list
         responses = await asyncio.gather(*tasks)
+        results_reasoning = [response[1] for response in responses]
+        responses= [response[0] for response in responses]
         results = []
         for response in responses:
             if response and hasattr(response, 'info') and response.info and 'tool_calls' in response.info and response.info['tool_calls']:

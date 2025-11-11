@@ -33,6 +33,8 @@ from oasis.social_platform.recsys import (rec_sys_personalized_twh,
                                           rec_sys_random, rec_sys_reddit)
 from oasis.social_platform.typing import ActionType, RecsysType
 
+from config import SimulationConfig
+
 # Create log directory if it doesn't exist
 log_dir = "./log"
 if not os.path.exists(log_dir):
@@ -125,15 +127,8 @@ class Platform:
             self.report_threshold,
         )
         
-        self.market_params = {
-            "hq_cost": 2.0,
-            "lq_cost": 1.0,
-            "hq_price": 5.0,
-            "lq_price": 3.0,
-            "warrant_escrow": 2.0,
-            "challenge_cost": 1.0,
-            "penalty": 4.0
-        }
+        self.market_params = SimulationConfig.MARKET_PARAMS
+
         self.db_lock = asyncio.Lock()
     async def running(self):
         while True:
@@ -187,7 +182,7 @@ class Platform:
         asyncio.run(self.running())
 
     async def sign_up(self, agent_id, user_message):
-        user_name, name, bio = user_message
+        user_name, name, bio, initial_budget = user_message
         if self.recsys_type == RecsysType.REDDIT:
             current_time = self.sandbox_clock.time_transfer(
                 datetime.now(), self.start_time)
@@ -196,16 +191,16 @@ class Platform:
         try:
             user_insert_query = (
                 "INSERT INTO user (user_id, agent_id, user_name, name, "
-                "bio, created_at, num_followings, num_followers) VALUES "
-                "(?, ?, ?, ?, ?, ?, ?, ?)")
+                "bio, created_at, num_followings, num_followers, budget) VALUES "
+                "(?, ?, ?, ?, ?, ?, ?, ?, ?)")
             self.pl_utils._execute_db_command(
                 user_insert_query,
-                (agent_id, agent_id, user_name, name, bio, current_time, 0, 0),
+                (agent_id, agent_id, user_name, name, bio, current_time, 0, 0, initial_budget),
                 commit=True,
             )
             user_id = agent_id
 
-            action_info = {"name": name, "user_name": user_name, "bio": bio}
+            action_info = {"name": name, "user_name": user_name, "bio": bio, "initial_budget": initial_budget}
             self.pl_utils._record_trace(user_id, ActionType.SIGNUP.value,
                                         action_info, current_time)
             # twitter_log.info(f"Trace inserted: user_id={user_id}, "
@@ -1670,15 +1665,7 @@ class Platform:
             if not post_result:
                 return {"success": False, "error": f"Product with ID {post_id} not found."}
             
-            seller_user_id, status, advertised_quality, true_quality, has_warrant, price, cost = post_result
-            
-            # Get seller agent_id and reputation score
-            seller_info_query = "SELECT agent_id, reputation_score FROM user WHERE user_id = ?"
-            self.pl_utils._execute_db_command(seller_info_query, (seller_user_id,))
-            seller_info_result = self.db_cursor.fetchone()
-            if not seller_info_result:
-                return {"success": False, "error": "Seller information not found."}
-            seller_agent_id, seller_reputation = seller_info_result
+            seller_id, status, advertised_quality, true_quality, has_warrant, price, cost = post_result
             
             # Get buyer user_id
             buyer_info_query = "SELECT user_id FROM user WHERE agent_id = ?"
@@ -1686,18 +1673,24 @@ class Platform:
             buyer_info_result = self.db_cursor.fetchone()
             if not buyer_info_result:
                 return {"success": False, "error": "Buyer information not found."}
-            buyer_user_id = buyer_info_result[0]
+            
+            self.pl_utils._execute_db_command("SELECT budget FROM user WHERE agent_id = ?", (buyer_id,))
+            current_budget = self.db_cursor.fetchone()[0]
+            if current_budget < price:
+                raise ValueError(f"Not enough budget to purchase this product. Current budget: {current_budget}, Price: {price}")
+            
             
             # Calculate seller profit: selling price - production cost - warranty cost
             seller_profit = price - cost
-            if has_warrant:
-                seller_profit -= self.market_params['warrant_escrow']
             
             # Calculate buyer utility: product quality utility - purchase price
             # High quality product utility is 8, low quality product utility is 5
-            quality_utility = 8 if true_quality == 'HQ' else 5
-            buyer_utility = quality_utility - price
-            
+            utility = SimulationConfig.MARKET_PARAMS['hq_utility'] if true_quality == 'HQ' else SimulationConfig.MARKET_PARAMS['lq_utility']
+            buyer_utility = utility - price
+            self.pl_utils._execute_db_command("UPDATE user SET budget = budget + ? WHERE agent_id = ?", (buyer_utility, buyer_id), commit=True)
+            self.pl_utils._execute_db_command("UPDATE user SET budget = budget + ? WHERE agent_id = ?", (seller_profit, seller_id), commit=True)
+
+
             # Update product status to sold
             post_update_query = "UPDATE post SET is_sold = 1, status = 'sold' WHERE post_id = ?"
             self.pl_utils._execute_db_command(post_update_query, (post_id,), commit=True)
@@ -1711,7 +1704,7 @@ class Platform:
             """
             self.pl_utils._execute_db_command(
                 transaction_insert_query,
-                (post_id, seller_user_id, buyer_user_id, self.sandbox_clock.get_round_step(), 
+                (post_id, seller_id, buyer_id, self.sandbox_clock.get_round_step(), 
                  seller_profit, buyer_utility, current_time),
                 commit=True
             )
@@ -1720,7 +1713,7 @@ class Platform:
             # Update seller and buyer profit/utility scores
             self.pl_utils._execute_db_command(
                 "UPDATE user SET profit_utility_score = profit_utility_score + ? WHERE agent_id = ?",
-                (seller_profit, seller_agent_id), commit=True
+                (seller_profit, seller_id), commit=True
             )
             self.pl_utils._execute_db_command(
                 "UPDATE user SET profit_utility_score = profit_utility_score + ? WHERE agent_id = ?",
@@ -1735,14 +1728,13 @@ class Platform:
                 "agent_id": buyer_id,
                 "transaction_id": transaction_id,
                 "post_id": post_id,
-                "seller_id": seller_agent_id,
+                "seller_id": seller_id,
                 "advertised_quality": advertised_quality,
                 "true_quality": true_quality,
                 "has_warrant": bool(has_warrant),
                 "seller_profit": seller_profit,
                 "buyer_utility": buyer_utility,
                 "purchase_price": price,
-                "seller_reputation": seller_reputation
             }
         except Exception as e:
             return {"success": False, "error": str(e)}
@@ -1762,6 +1754,13 @@ class Platform:
             
             # Use preset pricing strategy: high quality products fixed price 5, low quality products fixed price 3
             price = self.market_params['hq_price'] if adv_q == 'HQ' else self.market_params['lq_price']
+
+            self.pl_utils._execute_db_command("SELECT budget FROM user WHERE agent_id = ?", (seller_id,))
+            current_budget = self.db_cursor.fetchone()[0]
+            if current_budget < cost:
+                raise ValueError(f"Not enough budget to list product. Current budget: {current_budget}, Cost: {cost}")
+
+            self.pl_utils._execute_db_command("UPDATE user SET budget = budget - ? WHERE agent_id = ?", (cost, seller_id), commit=True)
 
             insert_query = (
                 "INSERT INTO post (user_id, created_at, true_quality, advertised_quality, price, cost, has_warrant, is_sold, status, round_number) "
@@ -1810,53 +1809,69 @@ class Platform:
         except Exception as e:
             return {"success": False, "error": str(e)}
             
-    async def challenge_warrant(self, agent_id: int, post_id: int):
+    async def challenge_warrant(self, agent_id: int, rating_details: dict):
         """Handle buyer challenging warranty backend logic."""
         buyer_id = agent_id
+        transaction_id = rating_details.get("transaction_id")
+        rating = rating_details.get("rating")
         current_time = self.sandbox_clock.get_time_step()
 
         try:
-            # 1. Query product and transaction information
+            # 1. Find transaction and get seller ID and post ID
+            trans_query = "SELECT seller_id, post_id FROM transactions WHERE transaction_id = ?"
+            self.pl_utils._execute_db_command(trans_query, (transaction_id,))
+            result = self.db_cursor.fetchone()
+            if not result:
+                return {"success": False, "error": f"Transaction {transaction_id} not found."}
+            seller_id, post_id = result
+
+            # Update rating in transaction table
+            update_trans_query = "UPDATE transactions SET rating = ? WHERE transaction_id = ?"
+            self.pl_utils._execute_db_command(update_trans_query, (rating, transaction_id), commit=True)
+
+            # 2. Query product and transaction information
             query = """
-                SELECT p.user_id, p.true_quality, p.advertised_quality, p.has_warrant, p.price, 
+                SELECT p.true_quality, p.advertised_quality, p.has_warrant, p.price, 
                        t.is_challenged, t.transaction_id, t.seller_profit, t.buyer_utility
                 FROM post p JOIN transactions t ON p.post_id = t.post_id
-                WHERE p.post_id = ? AND t.buyer_id = ?
+                WHERE p.post_id = ? AND t.transaction_id = ?
             """
-            self.pl_utils._execute_db_command(query, (post_id, buyer_id))
+            self.pl_utils._execute_db_command(query, (post_id, transaction_id))
             result = self.db_cursor.fetchone()
 
             if not result:
                 return {"success": False, "error": f"Transaction record not found for buyer ID: {buyer_id} regarding product ID: {post_id}."}
             
-            seller_id, true_q, adv_q, has_warrant, price, is_challenged, transaction_id, original_seller_profit, original_buyer_utility = result
+            true_q, adv_q, has_warrant, price, is_challenged, transaction_id, original_seller_profit, original_buyer_utility = result
 
             if not has_warrant:
                 return {"success": False, "error": f"Product {post_id} has no warranty, cannot challenge."}
             if is_challenged:
                 return {"success": False, "error": f"You have already challenged this transaction."}
 
-            # 2. Deduct buyer challenge cost and mark as challenged
-            challenge_cost = self.market_params['challenge_cost']
-            self.pl_utils._execute_db_command("UPDATE user SET profit_utility_score = profit_utility_score - ? WHERE user_id = ?", (challenge_cost, buyer_id), commit=True)
-            self.pl_utils._execute_db_command("UPDATE transactions SET is_challenged = 1, challenge_cost = ? WHERE post_id = ? AND buyer_id = ?", (challenge_cost, post_id, buyer_id), commit=True)
+            # 3. Deduct buyer challenge cost and mark as challenged
+            seller_penalty = 0
+            buyer_reward = 0
+            buyer_challenge_cost = self.market_params['challenge_cost']
+            self.pl_utils._execute_db_command("UPDATE user SET profit_utility_score = profit_utility_score - ? WHERE user_id = ?", (buyer_challenge_cost, buyer_id), commit=True)
+            self.pl_utils._execute_db_command("UPDATE transactions SET is_challenged = 1, challenge_cost = ? WHERE post_id = ? AND buyer_id = ?", (buyer_challenge_cost, post_id, buyer_id), commit=True)
 
-            # 3. Determine challenge result and settle
+            # 4. Determine challenge result and settle
             challenge_successful = (true_q == 'LQ' and adv_q == 'HQ')
-            
+
             if challenge_successful:
                 status = 'challenged_success'
-                penalty = self.market_params['penalty']
+                seller_penalty = self.market_params['warrant_escrow']
                 # Penalize seller
-                self.pl_utils._execute_db_command("UPDATE user SET profit_utility_score = profit_utility_score - ? WHERE user_id = ?", (penalty, seller_id), commit=True)
+                self.pl_utils._execute_db_command("UPDATE user SET profit_utility_score = profit_utility_score - ? WHERE user_id = ?", (seller_penalty, seller_id), commit=True)
                 # Reward buyer (refund + warranty as reward)
-                reward = price + self.market_params['warrant_escrow']
-                self.pl_utils._execute_db_command("UPDATE user SET profit_utility_score = profit_utility_score + ? WHERE user_id = ?", (reward, buyer_id), commit=True)
+                buyer_reward = self.market_params['warrant_escrow'] + buyer_challenge_cost
+                self.pl_utils._execute_db_command("UPDATE user SET profit_utility_score = profit_utility_score + ? WHERE user_id = ?", (buyer_reward, buyer_id), commit=True)
                 
                 # Update challenge result in transaction record
                 self.pl_utils._execute_db_command(
                     "UPDATE transactions SET challenge_reward = ?, challenge_penalty = ? WHERE transaction_id = ?",
-                    (reward, penalty, transaction_id), commit=True
+                    (buyer_reward, seller_penalty, transaction_id), commit=True
                 )
             else:
                 status = 'challenged_fail'
@@ -1866,11 +1881,13 @@ class Platform:
                     (transaction_id,), commit=True
                 )
             
-            # 4. Update product status
+            # 5. Update budget and product status
+            self.pl_utils._execute_db_command("UPDATE user SET budget = budget + ? WHERE user_id = ?", (buyer_reward-buyer_challenge_cost, buyer_id), commit=True)
+            self.pl_utils._execute_db_command("UPDATE user SET budget = budget + ? WHERE user_id = ?", (-seller_penalty, seller_id), commit=True)
             self.pl_utils._execute_db_command("UPDATE post SET status = ? WHERE post_id = ?", (status, post_id), commit=True)
 
-            # 5. Record in trace table
-            action_info = {"post_id": post_id, "successful": challenge_successful, "challenge_cost": challenge_cost}
+            # 6. Record in trace table
+            action_info = {"post_id": post_id, "successful": challenge_successful, "challenge_cost": buyer_challenge_cost, "seller_penalty": seller_penalty, "buyer_reward": buyer_reward}
             self.pl_utils._record_trace(buyer_id, ActionType.CHALLENGE_WARRANT.value, action_info, current_time)
             
             return {"success": True, "challenge_successful": challenge_successful}
