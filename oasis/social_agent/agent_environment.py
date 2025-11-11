@@ -24,36 +24,11 @@ from oasis.social_platform.database import get_db_path
 
 
 class Environment(ABC):
-
     @abstractmethod
     def to_text_prompt(self) -> str:
         r"""Convert the environment to text prompt."""
         raise NotImplementedError
 
-def get_product_listings_for_env() -> str:
-    """从数据库查询所有在售商品并格式化为字符串。"""
-    DATABASE_PATH = 'market_sim.db' # 确保文件名一致
-    if not os.path.exists(DATABASE_PATH):
-        return "No products are currently on sale."
-        
-    conn = sqlite3.connect(DATABASE_PATH)
-    cursor = conn.cursor()
-    listings = "No products are currently on sale."
-    try:
-        cursor.execute(
-            "SELECT post_id, user_id, advertised_quality, price, has_warrant FROM post WHERE status = 'on_sale'"
-        )
-        products = cursor.fetchall()
-        if products:
-            listings = "Here is the list of products currently on sale:\n"
-            for p in products:
-                warrant_info = " (Warranted)" if p[4] else ""
-                listings += f"- Product ID: {p[0]}, Seller ID: {p[1]}, Advertised Quality: {p[2]}, Price: ${p[3]:.2f}{warrant_info}\n"
-    except sqlite3.Error as e:
-        print(f"数据库查询错误 (get_product_listings_for_env): {e}")
-    finally:
-        conn.close()
-    return listings
 
 class SocialEnvironment(Environment):
     followers_env_template = Template("I have $num_followers followers.")
@@ -78,12 +53,50 @@ class SocialEnvironment(Environment):
         "posts content. Do not limit your action in just `like` to like posts")
     
     market_env_template = Template(
+        "Current Round: $current_round / 7\n"
+        "Current Budget: $$current_budget\n"
+        "Reputation Score: $reputation_score\n"
+        "Cumulative Utility: $cumulative_utility\n\n"
         "Current available products:\n$products")
 
-    def __init__(self, action: SocialAction):
+    def __init__(self, action: SocialAction, db_path: str = ""):
         self.action = action
-        # === market-sim: 添加一个标志位来区分模式 ===
+        self.db_path = db_path if db_path else get_db_path()
+        # === market-sim: add a flag to distinguish modes ===
         self.is_market_sim = False 
+
+    def get_product_listings_for_env(self) -> str:
+        """Query all products on sale from database and format as string."""
+        if not os.path.exists(self.db_path):
+            return "No products are currently on sale."
+            
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        listings = "No products are currently on sale."
+        try:
+            cursor.execute(
+                """
+                SELECT p.post_id, p.user_id, p.advertised_quality, p.price, p.has_warrant,
+                    COALESCE(u.reputation_score, 0) AS reputation_score
+                FROM post p
+                LEFT JOIN user u ON u.user_id = p.user_id
+                WHERE p.status = 'on_sale'
+                """
+            )
+            products = cursor.fetchall()
+            if products:
+                listings = "Here is the list of products currently on sale:\n"
+                for p in products:
+                    warrant_info = " (Warranted)" if p[4] else ""
+                    listings += (
+                        f"- Product ID: {p[0]}, Seller ID: {p[1]}, Seller Reputation: {p[5]}, "
+                        f"Advertised Quality: {p[2]}, Price: ${p[3]:.2f}{warrant_info}\n"
+                    )
+        except sqlite3.Error as e:
+            print(f"Database query error (get_product_listings_for_env): {e}")
+        finally:
+            conn.close()
+        return listings
 
     async def get_posts_env(self) -> str:
         posts = await self.action.refresh()
@@ -98,9 +111,8 @@ class SocialEnvironment(Environment):
     async def get_followers_env(self) -> str:
         # TODO: Implement followers env
         agent_id = self.action.agent_id
-        db_path = get_db_path()
         try:
-            conn = sqlite3.connect(db_path)
+            conn = sqlite3.connect(self.db_path)
             cursor = conn.cursor()
             cursor.execute("SELECT num_followers FROM user WHERE agent_id = ?",
                            (agent_id, ))
@@ -116,8 +128,7 @@ class SocialEnvironment(Environment):
         # TODO: Implement follows env
         agent_id = self.action.agent_id
         try:
-            db_path = get_db_path()
-            conn = sqlite3.connect(db_path)
+            conn = sqlite3.connect(self.db_path)
             cursor = conn.cursor()
             cursor.execute(
                 "SELECT num_followings FROM user WHERE agent_id = ?",
@@ -145,19 +156,91 @@ class SocialEnvironment(Environment):
             groups_env = "No groups."
         return groups_env
 
-    def get_market_environment(self) -> str:
-        """为市场模拟获取环境信息，直接展示商品列表。"""
-        products = get_product_listings_for_env()
-        return self.market_env_template.substitute(products=products)
+    def get_market_environment(self, agent=None, current_round=1, market_phase="general") -> str:
+        """Get environment information for market simulation, providing different observation content based on different market phases."""
+        from prompt import MarketEnv_prompt
+        
+        if not agent:
+            # If no agent information, return basic environment information
+            return f"Current Round: {current_round}/7\nNo agent information available."
+        
+        role = agent.user_info.profile.get("role")
+        
+        if market_phase == "listing" and role == "seller":
+            # Seller in listing phase: observe previous phase purchase feedback and current market status
+            previous_feedback = self._get_previous_feedback(agent)
+            available_products = self.get_product_listings_for_env()
+            total_profit = getattr(agent, 'total_profit', 0)
+            
+            return MarketEnv_prompt.SELLER_LISTING_ENV.format(
+                previous_feedback=previous_feedback,
+                current_round=current_round,
+                reputation_score=agent.reputation_score,
+                total_profit=total_profit,
+                available_products=available_products
+            )
+            
+        elif market_phase == "purchase" and role == "buyer":
+            # Buyer in purchase phase: observe currently purchasable products and seller information
+            available_products = self.get_product_listings_for_env()
+            seller_reputation_info = self._get_seller_reputation_info()
+            
+            return MarketEnv_prompt.BUYER_PURCHASE_ENV.format(
+                current_round=current_round,
+                cumulative_utility=agent.cumulative_utility,
+                available_products=available_products,
+                seller_reputation_info=seller_reputation_info
+            )
+            
+        elif market_phase == "rating" and role == "buyer":
+            # Buyer in rating phase: observe specific product information after purchase
+            purchase_info = getattr(agent, 'last_purchase_info', {})
+            
+            return MarketEnv_prompt.BUYER_RATING_ENV.format(
+                transaction_id=purchase_info.get('transaction_id', 'N/A'),
+                post_id=purchase_info.get('post_id', 'N/A'),
+                advertised_quality=purchase_info.get('advertised_quality', 'N/A'),
+                true_quality=purchase_info.get('true_quality', 'N/A'),
+                has_warrant=purchase_info.get('has_warrant', False),
+                purchase_price=purchase_info.get('purchase_price', 0),
+                buyer_utility=purchase_info.get('buyer_utility', 0),
+                seller_id=purchase_info.get('seller_id', 'N/A'),
+                seller_reputation=purchase_info.get('seller_reputation', 0)
+            )
+            
+        else:
+            # Other cases return basic environment information
+            return f"Current Round: {current_round}/7\nRole: {role}, Phase: {market_phase}\nNo specific environment template available."
+    
+    def _get_previous_feedback(self, agent) -> str:
+        """Get previous phase historical performance feedback information"""
+        # Get historical feedback information from agent's history_summary attribute
+        # This attribute is updated through sellers_history in run_single_simulation.py
+        if hasattr(agent, 'history_summary') and agent.history_summary:
+            # Check if it's a hidden message during initial window period
+            if agent.history_summary == "History hidden in initial window.":
+                return "This is within the initial window period. Historical performance data is not available yet."
+            return agent.history_summary
+        else:
+            return "No previous feedback available. This is your first round."
+    
+    def _get_seller_reputation_info(self) -> str:
+        """Get seller reputation information"""
+        # Should get all sellers' reputation information from database or platform here
+        # Return simulated data for now
+        return "Seller reputation information can't be view."
 
     async def to_text_prompt(
         self,
         include_posts: bool = True,
         include_followers: bool = True,
         include_follows: bool = True,
+        agent=None,
+        current_round=1,
+        market_phase="general",
     ) -> str:
         if self.is_market_sim:
-            return self.get_market_environment()
+            return self.get_market_environment(agent, current_round, market_phase)
         else:
             followers_env = (await self.get_followers_env()
                             if include_follows else "No followers.")

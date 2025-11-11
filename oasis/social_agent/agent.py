@@ -64,14 +64,21 @@ class SocialAgent(ChatAgent):
                                        List[BaseModelBackend],
                                        ModelManager]] = None,
                  agent_graph: "AgentGraph" = None,
-                 available_actions: list[ActionType] = None,
-                 tools: Optional[List[Union[FunctionTool, Callable]]] = None,
+                 available_actions: list[ActionType] = [],
+                 tools: Optional[List[Union[FunctionTool, Callable]]] = [],
                  max_iteration: int = 1,
-                 interview_record: bool = False):
+                 interview_record: bool = False,
+                 db_path: str = ""):
         self.social_agent_id = agent_id
         self.user_info = user_info
         self.channel = channel or Channel()
-        self.env = SocialEnvironment(SocialAction(agent_id, self.channel))
+        self.env = SocialEnvironment(SocialAction(agent_id, self.channel), db_path=db_path)
+        
+        # Agent state attributes
+        self.initial_budget = 10  # Seller and Buyer initial budget in simulation
+        self.reputation_score = 0    # Seller reputation
+        self.cumulative_utility = 0  # Buyer cumulative utility
+        self.history_summary = "This is the first round. You have no past performance data."
         if user_info_template is None:
             system_message_content = self.user_info.to_system_message()
         else:
@@ -82,32 +89,30 @@ class SocialAgent(ChatAgent):
             content=system_message_content,  # system prompt
         )
 
-        if not available_actions:
-            agent_log.info("No available actions defined, using all actions.")
-            self.action_tools = self.env.action.get_openai_function_list()
-        else:
-            all_tools = self.env.action.get_openai_function_list()
-            all_possible_actions = [tool.func.__name__ for tool in all_tools]
 
-            for action in available_actions:
-                action_name = action.value if isinstance(
-                    action, ActionType) else action
-                if action_name not in all_possible_actions:
-                    agent_log.warning(
-                        f"Action {action_name} is not supported. Supported "
-                        f"actions are: {', '.join(all_possible_actions)}")
-            self.action_tools = [
-                tool for tool in all_tools if tool.func.__name__ in [
-                    a.value if isinstance(a, ActionType) else a
-                    for a in available_actions
-                ]
+        all_possible_tools = self.env.action.get_openai_function_list()
+        all_possible_actions = [tool.func.__name__ for tool in all_possible_tools]
+        self.all_possible_actions_dict = {tool.func.__name__: tool for tool in all_possible_tools}
+
+        for action in available_actions:
+            action_name = action.value if isinstance(
+                action, ActionType) else action
+            if action_name not in all_possible_actions:
+                agent_log.warning(
+                    f"Action {action_name} is not supported. Supported "
+                    f"actions are: {', '.join(all_possible_actions)}")
+        self.action_tools = [
+            tool for tool in all_possible_tools if tool.func.__name__ in [
+                a.value if isinstance(a, ActionType) else a
+                for a in available_actions
             ]
+        ]
         all_tools = (tools or []) + (self.action_tools or [])
         super().__init__(system_message=system_message,
                          model=model,
                          scheduling_strategy='random_model',
                          tools=all_tools,
-                        #  max_iteration=max_iteration   #NOTE: shijun：我这边的camel-ai库似乎不能指定max_iteration，需要注意下版本
+                         max_iteration=max_iteration
                          )
         self.interview_record = interview_record
         self.agent_graph = agent_graph
@@ -121,8 +126,93 @@ class SocialAgent(ChatAgent):
             "\n"
             "What do you think Helen should do?")
 
-    async def perform_action_by_llm(self):
+    async def perform_market_action(self, extra_action: List[Union[FunctionTool, Callable]] = None, extra_prompt: str = None, current_round: int = 1, market_phase: str = "general"):
+        """
+        Execute market simulation actions, including environment observation and extra prompts.
         
+        Args:
+            extra_action: Additional tool list
+            extra_prompt: Additional prompt information
+            current_round: Current round number
+            market_phase: Market phase ("listing", "purchase", "rating", "general")
+        """
+        role = self.user_info.profile.get("role")
+
+        # Get corresponding environment observation based on market phase
+        env_prompt = await self.env.to_text_prompt(agent=self, current_round=current_round, market_phase=market_phase)
+        agent_log.info(
+            f"Agent {self.social_agent_id} ({role}) observing environment in {market_phase} phase: "
+            f"{env_prompt}")
+
+        # Build user message content: environment observation + extra prompt
+        if role == 'seller':
+            base_content = (
+                "Based on your system instructions, which include your "
+                "history and current state, you must now execute your "
+                "chosen action for this round."
+            )
+        elif role == 'buyer':
+            base_content = (
+                "You have observed the current state of the market. "
+                "Based on your role, objectives, and the market rules "
+                "outlined in your system instructions, please decide on the "
+                "best action to take now."
+            )
+        else:
+            base_content = ""
+        
+        # Combine environment observation and extra prompt
+        user_msg_content = f"{base_content}\n\n{env_prompt}"
+        if extra_prompt:
+            user_msg_content += f"\n\n## Additional Information:\n{extra_prompt}"
+        user_msg_content += (
+            "\n## Notice:\n"
+            "You must use the `tool_call` to invoke the tool to perform the operation."
+            "When you execute a tool_call, you also need to explain your reasoning."
+        )
+
+        user_msg = BaseMessage.make_user_message(
+            role_name="User",
+            content=user_msg_content
+        )
+
+        if extra_action:
+            extra_tool = [self.all_possible_actions_dict[extra_action_name] for extra_action_name in extra_action]
+            self.add_tools(extra_tool)
+            
+        action_reasoning = ""
+        try:
+            response = await self.astep(user_msg) 
+            action_reasoning = response.msg.content
+            
+            # Inject agent_id into return results
+            if response.info and 'tool_calls' in response.info and response.info['tool_calls']:  
+                for tool_call in response.info['tool_calls']:
+                    action_name = tool_call.tool_name
+                    args = tool_call.args
+                    # Add agent_id to platform return result dictionary
+                    if isinstance(tool_call.result, dict):
+                        tool_call.result['agent_id'] = self.social_agent_id
+                    agent_log.info(f"Agent {self.social_agent_id} performed "
+                                f"action: {action_name} with args: {args}"
+                                f"and reasoning: {action_reasoning}")
+            else:
+                agent_log.warning(f"Agent {self.social_agent_id} did not perform any action. Reasoning: {action_reasoning}")
+
+        except Exception as e:
+            agent_log.error(f"Agent {self.social_agent_id} error: {e}")
+            response = e
+
+        finally:
+            if extra_action:
+                self.remove_tools(extra_action)
+                
+            return response, action_reasoning
+
+    async def perform_action_by_llm(self, extra_action: List[Union[FunctionTool, Callable]] = None):
+        """
+        Original perform_action_by_llm function, keeping original functionality unchanged.
+        """
         role = self.user_info.profile.get("other_info", {}).get("role")
 
         env_prompt = await self.env.to_text_prompt()
@@ -151,39 +241,36 @@ class SocialAgent(ChatAgent):
             role_name="User",
             content=user_msg_content
         )
+
+        if extra_action:
+            self.add_tools(extra_action)
         
         try:
             response = await self.astep(user_msg)
             
-            # # 详细调试日志
-            # agent_log.info(f"=== AGENT {self.social_agent_id} ({role}) DEBUG ===")
-            # agent_log.info(f"LLM Response Content: {response.msg.content}")
-            # agent_log.info(f"Response Info Keys: {list(response.info.keys()) if response.info else 'None'}")
-            # if response.info and 'tool_calls' in response.info:
-            #     agent_log.info(f"Tool Calls Count: {len(response.info['tool_calls'])}")
-            #     agent_log.info(f"Tool Calls Content: {response.info['tool_calls']}")
-            # else:
-            #     agent_log.info("Tool Calls: None or empty")
-            # agent_log.info(f"Available Tools Count: {len(self.action_tools)}")
-            # agent_log.info(f"Available Tools: {[tool.func.__name__ for tool in self.action_tools]}")
-            # agent_log.info("=== END DEBUG ===")
-            #将 agent_id 注入到返回结果中
-            if response.info and 'tool_calls' in response.info and response.info['tool_calls']:  #TODO： 这里buyer的tool_call是空的
+            # Inject agent_id into return results
+            if response.info and 'tool_calls' in response.info and response.info['tool_calls']:  
                 for tool_call in response.info['tool_calls']:
                     action_name = tool_call.tool_name
                     args = tool_call.args
-                    # 将 agent_id 添加到 platform 返回的结果字典中
+                    # Add agent_id to platform return result dictionary
                     if isinstance(tool_call.result, dict):
                         tool_call.result['agent_id'] = self.social_agent_id
                     agent_log.info(f"Agent {self.social_agent_id} performed "
                                 f"action: {action_name} with args: {args}")
             else:
                 agent_log.warning(f"Agent {self.social_agent_id} did not perform any action.")
-            
-            return response
+
         except Exception as e:
             agent_log.error(f"Agent {self.social_agent_id} error: {e}")
-            return e
+            response = e
+
+        finally:
+            if extra_action:
+                extra_action_names = [tool.func.__name__ for tool in extra_action]
+                self.remove_tools(extra_action_names)
+                
+            return response
 
     async def perform_test(self):
         """

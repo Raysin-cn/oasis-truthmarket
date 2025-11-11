@@ -16,19 +16,28 @@ from __future__ import annotations
 import ast
 import asyncio
 import json
+import os
 from typing import List, Optional, Union
-
+import uuid
 import pandas as pd
 import tqdm
+from camel.agents import ChatAgent
+from camel.models import ModelFactory
 from camel.memories import MemoryRecord
 from camel.messages import BaseMessage
 from camel.models import BaseModelBackend, ModelManager
-from camel.types import OpenAIBackendRole
+from camel.types import OpenAIBackendRole, ModelPlatformType
+from camel.prompts import TextPrompt
 
 from oasis.social_agent import AgentGraph, SocialAgent
 from oasis.social_platform import Channel, Platform
 from oasis.social_platform.config import Neo4jConfig, UserInfo
 from oasis.social_platform.typing import ActionType
+from prompt import get_prompt_child
+
+import itertools
+
+id_gen = itertools.count(1)  # Start from 1, increment by 1 each time
 
 
 async def generate_agents(
@@ -359,7 +368,7 @@ async def generate_controllable_agents(
             }},
             recsys_type="reddit",
         )
-        # controllable的agent_id全都在llm agent的agent_id的前面
+        # All controllable agent_ids are before llm agent agent_ids
         agent = SocialAgent(agent_id=i,
                             user_info=user_info,
                             channel=channel,
@@ -378,7 +387,7 @@ async def generate_controllable_agents(
     for i in range(control_user_num):
         for j in range(control_user_num):
             agent = agent_graph.get_agent(i)
-            # controllable agent互相也全部关注
+            # All controllable agents follow each other
             if i != j:
                 user_id = agent_user_id_mapping[j]
                 await agent.env.action.follow(user_id)
@@ -407,7 +416,7 @@ async def gen_control_agents_with_data(
             },
             recsys_type="reddit",
         )
-        # controllable的agent_id全都在llm agent的agent_id的前面
+        # All controllable agent_ids are before llm agent agent_ids
         agent = SocialAgent(
             agent_id=i,
             user_info=user_info,
@@ -557,7 +566,8 @@ async def generate_custom_agents(
     sign_up_tasks = [
         agent.env.action.sign_up(user_name=agent.user_info.user_name,
                                  name=agent.user_info.name,
-                                 bio=agent.user_info.description)
+                                 bio=agent.user_info.description,
+                                 initial_budget=agent.initial_budget)
         for _, agent in agent_graph.get_agents()
     ]
     await asyncio.gather(*sign_up_tasks)
@@ -646,4 +656,92 @@ async def generate_twitter_agent_graph(
         )
 
         agent_graph.add_agent(agent)
+    return agent_graph
+
+
+
+
+async def generate_agent_from_LLM(agents_num:int, 
+                                sys_prompt:str, 
+                                user_prompt:str,
+                                role:str,
+                                model: BaseModelBackend,
+                                market_type: str,
+                                agent_graph: AgentGraph = None,
+                                agent_checkpoint_save: bool = True,
+                                db_path: str = ""):
+
+    if agent_checkpoint_save == True and os.path.exists(f"./data/agent_checkpoint_{role}.json"):
+        with open(f"./data/agent_checkpoint_{role}.json", "r") as file:
+            user_trait_list = json.load(file)
+    else:
+        user_trait_list = []
+
+    generator_agent = ChatAgent(
+        model = model,
+        system_message = sys_prompt,
+    )
+
+    for i in range(max(0, agents_num-len(user_trait_list))):
+        user_message = user_prompt.format(i)
+        user_trait_response = generator_agent.step(user_message)
+        
+        # Clean markdown code block markers from LLM response content
+        content = user_trait_response.msgs[0].content
+        if content.startswith('```json'):
+            content = content[7:]  # Remove ```json
+        if content.endswith('```'):
+            content = content[:-3]  # Remove ```
+        content = content.strip()
+        
+        user_trait = json.loads(content)
+        user_trait_list.append(user_trait)
+
+    with open(f"./data/agent_checkpoint_{role}.json", "w") as file:
+        json.dump(user_trait_list, file)
+
+    if agent_graph is None:
+        agent_graph = AgentGraph(backend="igraph")
+    
+    for idx, agent_info in enumerate(user_trait_list):
+        if idx >= agents_num:
+            break
+
+        # Select corresponding TextPrompt template based on role
+        template = get_prompt_child(role, "MASTER_PROMPT", market_type)
+        
+        profile = {
+            # Add static key-value pairs required by System_prompt template
+            "user_profile": agent_info["user_char"],
+            "role": role,
+            "market_type": market_type, 
+            "market_rules": get_prompt_child(role, "MARKET_RULES", market_type),  
+            "actions": get_prompt_child(role, "ACTIONS", market_type),
+            "payoff_matrix": get_prompt_child(role, "PAYOFF_MATRIX", market_type),  
+        }
+
+        
+
+        user_info = UserInfo(
+            name=agent_info["username"],
+            description=agent_info["description"],
+            profile=profile,
+            recsys_type='twitter',
+            market_type=market_type,
+        )
+        agent_id = next(id_gen)
+        agent = SocialAgent(
+            agent_id=agent_id,
+            user_info=user_info,
+            user_info_template=template, 
+            model=model,
+            agent_graph=agent_graph,
+            # available_actions=get_prompt_child(role, "ACTIONS", market_type), 
+            max_iteration = 1,
+            db_path=db_path,
+        )
+
+        agent_graph.add_agent(agent)
+
+
     return agent_graph

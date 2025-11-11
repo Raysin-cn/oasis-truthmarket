@@ -39,6 +39,8 @@ GROUP_SCHEMA_SQL = "chat_group.sql"
 GROUP_MEMBER_SCHEMA_SQL = "group_member.sql"
 GROUP_MESSAGE_SCHEMA_SQL = "group_message.sql"
 TRANSACTIONS_SCHEMA_SQL = "transactions.sql"
+REPUTATION_HISTORY_SCHEMA_SQL = "reputation_history.sql"
+ANALYSIS_LABELS_SCHEMA_SQL = "analysis_labels.sql"
 
 TABLE_NAMES = {
     "user",
@@ -58,6 +60,8 @@ TABLE_NAMES = {
     "group_member",
     "group_message",
     "transactions",
+    "reputation_history",
+    "analysis_labels",
 }
 
 
@@ -199,6 +203,19 @@ def create_db(db_path: str | None = None):
         with open(transactions_sql_path, "r") as sql_file:
             transactions_sql_script = sql_file.read()
         cursor.executescript(transactions_sql_script)
+
+        # Read and execute the reputation_history table SQL script:
+
+        reputation_history_sql_path = osp.join(schema_dir, REPUTATION_HISTORY_SCHEMA_SQL)
+        with open(reputation_history_sql_path, "r") as sql_file:
+            reputation_history_sql_script = sql_file.read()
+        cursor.executescript(reputation_history_sql_script)
+        
+        # Read and execute the analysis_labels table SQL script:
+        analysis_labels_sql_path = osp.join(schema_dir, ANALYSIS_LABELS_SCHEMA_SQL)
+        with open(analysis_labels_sql_path, "r") as sql_file:
+            analysis_labels_sql_script = sql_file.read()
+        cursor.executescript(analysis_labels_sql_script)
 
         # Commit the changes:
         conn.commit()

@@ -33,6 +33,8 @@ from oasis.social_platform.recsys import (rec_sys_personalized_twh,
                                           rec_sys_random, rec_sys_reddit)
 from oasis.social_platform.typing import ActionType, RecsysType
 
+from config import SimulationConfig
+
 # Create log directory if it doesn't exist
 log_dir = "./log"
 if not os.path.exists(log_dir):
@@ -125,15 +127,8 @@ class Platform:
             self.report_threshold,
         )
         
-        self.market_params = {
-            "hq_cost": 2.0,
-            "lq_cost": 1.0,
-            "hq_price": 5.0,
-            "lq_price": 3.0,
-            "warrant_escrow": 3.0,
-            "challenge_cost": 1.0,
-            "penalty": 4.0
-        }
+        self.market_params = SimulationConfig.MARKET_PARAMS
+
         self.db_lock = asyncio.Lock()
     async def running(self):
         while True:
@@ -187,7 +182,7 @@ class Platform:
         asyncio.run(self.running())
 
     async def sign_up(self, agent_id, user_message):
-        user_name, name, bio = user_message
+        user_name, name, bio, initial_budget = user_message
         if self.recsys_type == RecsysType.REDDIT:
             current_time = self.sandbox_clock.time_transfer(
                 datetime.now(), self.start_time)
@@ -196,16 +191,16 @@ class Platform:
         try:
             user_insert_query = (
                 "INSERT INTO user (user_id, agent_id, user_name, name, "
-                "bio, created_at, num_followings, num_followers) VALUES "
-                "(?, ?, ?, ?, ?, ?, ?, ?)")
+                "bio, created_at, num_followings, num_followers, budget) VALUES "
+                "(?, ?, ?, ?, ?, ?, ?, ?, ?)")
             self.pl_utils._execute_db_command(
                 user_insert_query,
-                (agent_id, agent_id, user_name, name, bio, current_time, 0, 0),
+                (agent_id, agent_id, user_name, name, bio, current_time, 0, 0, initial_budget),
                 commit=True,
             )
             user_id = agent_id
 
-            action_info = {"name": name, "user_name": user_name, "bio": bio}
+            action_info = {"name": name, "user_name": user_name, "bio": bio, "initial_budget": initial_budget}
             self.pl_utils._record_trace(user_id, ActionType.SIGNUP.value,
                                         action_info, current_time)
             # twitter_log.info(f"Trace inserted: user_id={user_id}, "
@@ -1653,53 +1648,99 @@ class Platform:
             return {"success": False, "error": str(e)}
 
     async def purchase_product_id(self, agent_id: int, post_id: int):
-        """处理买家购买商品的后台逻辑，并返回详细结果。"""
+        """Handle buyer purchase product backend logic and return detailed results."""
         buyer_id = agent_id
         current_time = self.sandbox_clock.get_time_step()
 
         try:
-            post_check_query = "SELECT user_id, status, advertised_quality, true_quality, has_warrant FROM post WHERE post_id = ?"
+            # Get product details including price and cost
+            post_check_query = """
+                SELECT user_id, status, advertised_quality, true_quality, has_warrant, 
+                       price, cost
+                FROM post WHERE post_id = ?
+            """
             self.pl_utils._execute_db_command(post_check_query, (post_id,))
             post_result = self.db_cursor.fetchone()
 
             if not post_result:
-                return {"success": False, "error": f"ID为 {post_id} 的商品未找到。"}
+                return {"success": False, "error": f"Product with ID {post_id} not found."}
             
-            seller_id, status, advertised_quality, true_quality, has_warrant = post_result
-            if status != 'on_sale':
-                return {"success": False, "error": f"商品 {post_id} 已售出或下架。"}
+            seller_id, status, advertised_quality, true_quality, has_warrant, price, cost = post_result
+            
+            # Get buyer user_id
+            buyer_info_query = "SELECT user_id FROM user WHERE agent_id = ?"
+            self.pl_utils._execute_db_command(buyer_info_query, (buyer_id,))
+            buyer_info_result = self.db_cursor.fetchone()
+            if not buyer_info_result:
+                return {"success": False, "error": "Buyer information not found."}
+            
+            self.pl_utils._execute_db_command("SELECT budget FROM user WHERE agent_id = ?", (buyer_id,))
+            current_budget = self.db_cursor.fetchone()[0]
+            if current_budget < price:
+                raise ValueError(f"Not enough budget to purchase this product. Current budget: {current_budget}, Price: {price}")
+            
+            
+            # Calculate seller profit: selling price - production cost - warranty cost
+            seller_profit = price - cost
+            
+            # Calculate buyer utility: product quality utility - purchase price
+            # High quality product utility is 8, low quality product utility is 5
+            utility = SimulationConfig.MARKET_PARAMS['hq_utility'] if true_quality == 'HQ' else SimulationConfig.MARKET_PARAMS['lq_utility']
+            buyer_utility = utility - price
+            self.pl_utils._execute_db_command("UPDATE user SET budget = budget + ? WHERE agent_id = ?", (buyer_utility, buyer_id), commit=True)
+            self.pl_utils._execute_db_command("UPDATE user SET budget = budget + ? WHERE agent_id = ?", (seller_profit, seller_id), commit=True)
 
+
+            # Update product status to sold
             post_update_query = "UPDATE post SET is_sold = 1, status = 'sold' WHERE post_id = ?"
             self.pl_utils._execute_db_command(post_update_query, (post_id,), commit=True)
 
-            transaction_insert_query = (
-                "INSERT INTO transactions (post_id, seller_id, buyer_id, round_number) "
-                "VALUES (?, ?, ?, ?)"
-            )
+            # Insert transaction record with complete profit information
+            transaction_insert_query = """
+                INSERT INTO transactions (
+                    post_id, seller_id, buyer_id, round_number, 
+                    seller_profit, buyer_utility, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?)
+            """
             self.pl_utils._execute_db_command(
                 transaction_insert_query,
-                (post_id, seller_id, buyer_id, current_time),
+                (post_id, seller_id, buyer_id, self.sandbox_clock.get_round_step(), 
+                 seller_profit, buyer_utility, current_time),
                 commit=True
             )
             transaction_id = self.db_cursor.lastrowid
+
+            # Update seller and buyer profit/utility scores
+            self.pl_utils._execute_db_command(
+                "UPDATE user SET profit_utility_score = profit_utility_score + ? WHERE agent_id = ?",
+                (seller_profit, seller_id), commit=True
+            )
+            self.pl_utils._execute_db_command(
+                "UPDATE user SET profit_utility_score = profit_utility_score + ? WHERE agent_id = ?",
+                (buyer_utility, buyer_id), commit=True
+            )
 
             action_info = {"post_id": post_id, "transaction_id": transaction_id}
             self.pl_utils._record_trace(buyer_id, ActionType.PURCHASE_PRODUCT_ID.value, action_info, current_time)
 
             return {
                 "success": True, 
+                "agent_id": buyer_id,
                 "transaction_id": transaction_id,
                 "post_id": post_id,
                 "seller_id": seller_id,
                 "advertised_quality": advertised_quality,
                 "true_quality": true_quality,
-                "has_warrant": bool(has_warrant)
+                "has_warrant": bool(has_warrant),
+                "seller_profit": seller_profit,
+                "buyer_utility": buyer_utility,
+                "purchase_price": price,
             }
         except Exception as e:
             return {"success": False, "error": str(e)}
     
     async def list_product(self, agent_id: int, product_details: dict):
-        """处理卖家上架商品的后端逻辑。"""
+        """Handle seller listing product backend logic."""
         seller_id = agent_id
         current_time = self.sandbox_clock.get_time_step()
         
@@ -1707,10 +1748,19 @@ class Platform:
             adv_q = product_details.get("advertised_quality")
             prod_q = product_details.get("product_quality")
             has_warrant = product_details.get("has_warrant", False)
-            round_number = self.sandbox_clock.get_time_step()
+            round_number = self.sandbox_clock.get_round_step()
 
             cost = self.market_params['hq_cost'] if prod_q == 'HQ' else self.market_params['lq_cost']
+            
+            # Use preset pricing strategy: high quality products fixed price 5, low quality products fixed price 3
             price = self.market_params['hq_price'] if adv_q == 'HQ' else self.market_params['lq_price']
+
+            self.pl_utils._execute_db_command("SELECT budget FROM user WHERE agent_id = ?", (seller_id,))
+            current_budget = self.db_cursor.fetchone()[0]
+            if current_budget < cost:
+                raise ValueError(f"Not enough budget to list product. Current budget: {current_budget}, Cost: {cost}")
+
+            self.pl_utils._execute_db_command("UPDATE user SET budget = budget - ? WHERE agent_id = ?", (cost, seller_id), commit=True)
 
             insert_query = (
                 "INSERT INTO post (user_id, created_at, true_quality, advertised_quality, price, cost, has_warrant, is_sold, status, round_number) "
@@ -1724,38 +1774,34 @@ class Platform:
             )
             post_id = self.db_cursor.lastrowid
             
-            action_info = {"post_id": post_id, "details": product_details}
+            action_info = {"post_id": post_id, "details": product_details, "price": price}
             self.pl_utils._record_trace(seller_id, ActionType.LIST_PRODUCT.value, action_info, current_time)
             
-            return {"success": True, "post_id": post_id}
+            return {"success": True, "post_id": post_id, "price": price}
         except Exception as e:
             return {"success": False, "error": str(e)}
     
     async def rate_transaction(self, agent_id: int, rating_details: dict):
-        """处理买家评价交易的后端逻辑。"""
+        """Handle buyer rating transaction backend logic."""
         buyer_id = agent_id
         transaction_id = rating_details.get("transaction_id")
         rating = rating_details.get("rating")
         current_time = self.sandbox_clock.get_time_step()
         
         try:
-            # 1. 找到交易并获取卖家ID
+            # 1. Find transaction and get seller ID
             trans_query = "SELECT seller_id FROM transactions WHERE transaction_id = ?"
             self.pl_utils._execute_db_command(trans_query, (transaction_id,))
             result = self.db_cursor.fetchone()
             if not result:
-                return {"success": False, "error": f"交易 {transaction_id} 未找到。"}
+                return {"success": False, "error": f"Transaction {transaction_id} not found."}
             seller_id = result[0]
 
-            # 2. 更新交易表中的评分
+            # 2. Update rating in transaction table
             update_trans_query = "UPDATE transactions SET rating = ? WHERE transaction_id = ?"
             self.pl_utils._execute_db_command(update_trans_query, (rating, transaction_id), commit=True)
-            
-            # 3. 更新卖家的声誉分数
-            update_user_query = "UPDATE user SET reputation_score = reputation_score + ? WHERE user_id = ?"
-            self.pl_utils._execute_db_command(update_user_query, (rating, seller_id), commit=True)
 
-            # 4. 在 trace 表中记录
+            # 4. Record in trace table
             action_info = {"transaction_id": transaction_id, "rating": rating}
             self.pl_utils._record_trace(buyer_id, ActionType.RATE_TRANSACTION.value, action_info, current_time)
 
@@ -1763,55 +1809,85 @@ class Platform:
         except Exception as e:
             return {"success": False, "error": str(e)}
             
-    async def challenge_warrant(self, agent_id: int, post_id: int):
-        """处理买家挑战保证金的后端逻辑。"""
+    async def challenge_warrant(self, agent_id: int, rating_details: dict):
+        """Handle buyer challenging warranty backend logic."""
         buyer_id = agent_id
+        transaction_id = rating_details.get("transaction_id")
+        rating = rating_details.get("rating")
         current_time = self.sandbox_clock.get_time_step()
 
         try:
-            # 1. 查询商品和交易信息
+            # 1. Find transaction and get seller ID and post ID
+            trans_query = "SELECT seller_id, post_id FROM transactions WHERE transaction_id = ?"
+            self.pl_utils._execute_db_command(trans_query, (transaction_id,))
+            result = self.db_cursor.fetchone()
+            if not result:
+                return {"success": False, "error": f"Transaction {transaction_id} not found."}
+            seller_id, post_id = result
+
+            # Update rating in transaction table
+            update_trans_query = "UPDATE transactions SET rating = ? WHERE transaction_id = ?"
+            self.pl_utils._execute_db_command(update_trans_query, (rating, transaction_id), commit=True)
+
+            # 2. Query product and transaction information
             query = """
-                SELECT p.seller_id, p.true_quality, p.advertised_quality, p.has_warrant, p.price, t.is_challenged
+                SELECT p.true_quality, p.advertised_quality, p.has_warrant, p.price, 
+                       t.is_challenged, t.transaction_id, t.seller_profit, t.buyer_utility
                 FROM post p JOIN transactions t ON p.post_id = t.post_id
-                WHERE p.post_id = ? AND t.buyer_id = ?
+                WHERE p.post_id = ? AND t.transaction_id = ?
             """
-            self.pl_utils._execute_db_command(query, (post_id, buyer_id))
+            self.pl_utils._execute_db_command(query, (post_id, transaction_id))
             result = self.db_cursor.fetchone()
 
             if not result:
-                return {"success": False, "error": f"未找到您(买家ID: {buyer_id})关于商品(ID: {post_id})的交易记录。"}
+                return {"success": False, "error": f"Transaction record not found for buyer ID: {buyer_id} regarding product ID: {post_id}."}
             
-            seller_id, true_q, adv_q, has_warrant, price, is_challenged = result
+            true_q, adv_q, has_warrant, price, is_challenged, transaction_id, original_seller_profit, original_buyer_utility = result
 
             if not has_warrant:
-                return {"success": False, "error": f"商品 {post_id} 没有保证金，无法挑战。"}
+                return {"success": False, "error": f"Product {post_id} has no warranty, cannot challenge."}
             if is_challenged:
-                return {"success": False, "error": f"您已经挑战过此交易。"}
+                return {"success": False, "error": f"You have already challenged this transaction."}
 
-            # 2. 扣除买家挑战成本并标记为已挑战
-            challenge_cost = self.market_params['challenge_cost']
-            self.pl_utils._execute_db_command("UPDATE user SET profit_utility_score = profit_utility_score - ? WHERE user_id = ?", (challenge_cost, buyer_id), commit=True)
-            self.pl_utils._execute_db_command("UPDATE transactions SET is_challenged = 1 WHERE post_id = ? AND buyer_id = ?", (post_id, buyer_id), commit=True)
+            # 3. Deduct buyer challenge cost and mark as challenged
+            seller_penalty = 0
+            buyer_reward = 0
+            buyer_challenge_cost = self.market_params['challenge_cost']
+            self.pl_utils._execute_db_command("UPDATE user SET profit_utility_score = profit_utility_score - ? WHERE user_id = ?", (buyer_challenge_cost, buyer_id), commit=True)
+            self.pl_utils._execute_db_command("UPDATE transactions SET is_challenged = 1, challenge_cost = ? WHERE post_id = ? AND buyer_id = ?", (buyer_challenge_cost, post_id, buyer_id), commit=True)
 
-            # 3. 判断挑战结果并结算
+            # 4. Determine challenge result and settle
             challenge_successful = (true_q == 'LQ' and adv_q == 'HQ')
-            
+
             if challenge_successful:
                 status = 'challenged_success'
-                penalty = self.market_params['penalty']
-                # 惩罚卖家
-                self.pl_utils._execute_db_command("UPDATE user SET profit_utility_score = profit_utility_score - ? WHERE user_id = ?", (penalty, seller_id), commit=True)
-                # 奖励买家 (退款+保证金作为奖励)
-                reward = price + self.market_params['warrant_escrow']
-                self.pl_utils._execute_db_command("UPDATE user SET profit_utility_score = profit_utility_score + ? WHERE user_id = ?", (reward, buyer_id), commit=True)
+                seller_penalty = self.market_params['warrant_escrow']
+                # Penalize seller
+                self.pl_utils._execute_db_command("UPDATE user SET profit_utility_score = profit_utility_score - ? WHERE user_id = ?", (seller_penalty, seller_id), commit=True)
+                # Reward buyer (refund + warranty as reward)
+                buyer_reward = self.market_params['warrant_escrow'] + buyer_challenge_cost
+                self.pl_utils._execute_db_command("UPDATE user SET profit_utility_score = profit_utility_score + ? WHERE user_id = ?", (buyer_reward, buyer_id), commit=True)
+                
+                # Update challenge result in transaction record
+                self.pl_utils._execute_db_command(
+                    "UPDATE transactions SET challenge_reward = ?, challenge_penalty = ? WHERE transaction_id = ?",
+                    (buyer_reward, seller_penalty, transaction_id), commit=True
+                )
             else:
                 status = 'challenged_fail'
+                # Challenge failed, buyer loses challenge cost
+                self.pl_utils._execute_db_command(
+                    "UPDATE transactions SET challenge_reward = 0, challenge_penalty = 0 WHERE transaction_id = ?",
+                    (transaction_id,), commit=True
+                )
             
-            # 4. 更新商品状态
+            # 5. Update budget and product status
+            self.pl_utils._execute_db_command("UPDATE user SET budget = budget + ? WHERE user_id = ?", (buyer_reward-buyer_challenge_cost, buyer_id), commit=True)
+            self.pl_utils._execute_db_command("UPDATE user SET budget = budget + ? WHERE user_id = ?", (-seller_penalty, seller_id), commit=True)
             self.pl_utils._execute_db_command("UPDATE post SET status = ? WHERE post_id = ?", (status, post_id), commit=True)
 
-            # 5. 在 trace 表中记录
-            action_info = {"post_id": post_id, "successful": challenge_successful}
+            # 6. Record in trace table
+            action_info = {"post_id": post_id, "successful": challenge_successful, "challenge_cost": buyer_challenge_cost, "seller_penalty": seller_penalty, "buyer_reward": buyer_reward}
             self.pl_utils._record_trace(buyer_id, ActionType.CHALLENGE_WARRANT.value, action_info, current_time)
             
             return {"success": True, "challenge_successful": challenge_successful}
@@ -1819,31 +1895,28 @@ class Platform:
             return {"success": False, "error": str(e)}
 
     async def exit_market(self, agent_id: int, message: Any):
-        """处理卖家退出市场的后端逻辑。"""
+        """Handle seller exiting market backend logic (conceptual intent)."""
         seller_id = agent_id
         current_time = self.sandbox_clock.get_time_step()
         try:
-            # 根据设计文档，主要操作是重置声誉分数
-            update_query = "UPDATE user SET reputation_score = 0 WHERE user_id = ?"
-            self.pl_utils._execute_db_command(update_query, (seller_id,), commit=True)
-
-            # 可以在 trace 表中记录此行为
-            self.pl_utils._record_trace(seller_id, ActionType.EXIT_MARKET.value, {}, current_time)
-
-            return {"success": True, "message": f"卖家 {seller_id} 已退出市场，声誉已重置。"}
+            # Conceptual marking: only record exit intent, no database status modification
+            self.pl_utils._record_trace(seller_id, ActionType.EXIT_MARKET.value, message or {}, current_time)
+            return {"success": True, "message": f"Seller {seller_id} submitted exit market intent."}
         except Exception as e:
             return {"success": False, "error": str(e)}
 
     async def reenter_market(self, agent_id: int, message: Any):
-        """处理卖家重新进入市场的后端逻辑。"""
+        """Handle seller re-entering market backend logic (refresh reputation)."""
         seller_id = agent_id
         current_time = self.sandbox_clock.get_time_step()
         try:
-            # 这个动作主要是概念性的，表明一个意图。
-            # 平台层面可能不需要做数据库修改，因为卖家在下一回合默认就可以行动。
-            # 我们只在 trace 表中记录这个意图即可。
-            self.pl_utils._record_trace(seller_id, ActionType.REENTER_MARKET.value, {}, current_time)
+            # Per simulation semantics: reset negative reputation to 0 (or directly set to non-negative baseline)
+            reset_needed = True if not message else message.get("reset_reputation", True)
+            if reset_needed:
+                update_query = "UPDATE user SET reputation_score = 0, enter_market_round = ? WHERE user_id = ?"
+                self.pl_utils._execute_db_command(update_query, (current_time, seller_id,), commit=True)
 
-            return {"success": True, "message": f"卖家 {seller_id} 已表示将在下一回合重新进入市场。"}
+            self.pl_utils._record_trace(seller_id, ActionType.REENTER_MARKET.value, message or {}, current_time)
+            return {"success": True, "message": f"Seller {seller_id} has re-entered market, reputation refreshed."}
         except Exception as e:
             return {"success": False, "error": str(e)}

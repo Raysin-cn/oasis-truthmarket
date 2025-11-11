@@ -68,6 +68,9 @@ class OasisEnv:
         self.agent_graph = agent_graph
         # Use a semaphore to limit the number of concurrent requests
         self.llm_semaphore = asyncio.Semaphore(semaphore)
+        # Environment state
+        self.current_round = 1
+        self.market_phase = "general"  # Current market phase: listing, purchase, rating, general
         if isinstance(platform, DefaultPlatformType):
             if database_path is None:
                 raise ValueError(
@@ -121,11 +124,13 @@ class OasisEnv:
         self.agent_graph = await generate_custom_agents(
             channel=self.channel, agent_graph=self.agent_graph)
 
-    async def _perform_llm_action(self, agent):
+    async def _perform_llm_action(self, agent, llm_action):
         r"""Send the request to the llm model and execute the action.
         """
         async with self.llm_semaphore:
-            return await agent.perform_action_by_llm()
+            extra_action = llm_action.extra_action if hasattr(llm_action, 'extra_action') else None
+            extra_prompt = llm_action.extra_prompt if hasattr(llm_action, 'extra_prompt') else None
+            return await agent.perform_market_action(extra_action, extra_prompt, self.current_round, self.market_phase)
 
     async def _perform_interview_action(self, agent, interview_prompt: str):
         r"""Send the request to the llm model and execute the interview.
@@ -153,7 +158,7 @@ class OasisEnv:
                         else:
                             tasks.append(agent.perform_action_by_data(single_action.action_type, **single_action.action_args))
                     elif isinstance(single_action, LLMAction):
-                        tasks.append(self._perform_llm_action(agent))
+                        tasks.append(self._perform_llm_action(agent, single_action))
             else:
                 if isinstance(action, ManualAction):
                     if action.action_type == ActionType.INTERVIEW:
@@ -162,14 +167,16 @@ class OasisEnv:
                     else:
                         tasks.append(agent.perform_action_by_data(action.action_type, **action.action_args))
                 elif isinstance(action, LLMAction):
-                    tasks.append(self._perform_llm_action(agent))
+                    tasks.append(self._perform_llm_action(agent, action))
 
-        # 执行所有任务并提取、返回结果列表
+        # Execute all tasks and extract, return result list
         responses = await asyncio.gather(*tasks)
+        results_reasoning = [response[1] for response in responses]
+        responses= [response[0] for response in responses]
         results = []
         for response in responses:
             if response and hasattr(response, 'info') and response.info and 'tool_calls' in response.info and response.info['tool_calls']:
-                # 提取每个成功调用的结果
+                # Extract result of each successful call
                 for tool_call in response.info['tool_calls']:
                     if tool_call.result:
                         results.append(tool_call.result)

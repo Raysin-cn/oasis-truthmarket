@@ -47,12 +47,12 @@ class ActionType(Enum):
     SEND_TO_GROUP = "send_to_group"
     CREATE_GROUP = "create_group"
     LISTEN_FROM_GROUP = "listen_from_group"
-    LIST_PRODUCT = "list_product"            # 卖家上架商品
-    EXIT_MARKET = "exit_market"              # 卖家退出市场
-    REENTER_MARKET = "reenter_market"        # 卖家重新进入市场
-    PURCHASE_PRODUCT_ID = "purchase_product_id"    # 买家购买商品
-    CHALLENGE_WARRANT = "challenge_warrant"  # 买家挑战保证金 
-    RATE_TRANSACTION = "rate_transaction"    # 买家评价交易 
+    LIST_PRODUCT = "list_product"            # Seller listing product
+    EXIT_MARKET = "exit_market"              # Seller exiting market
+    REENTER_MARKET = "reenter_market"        # Seller re-entering market
+    PURCHASE_PRODUCT_ID = "purchase_product_id"    # Buyer purchasing product
+    CHALLENGE_WARRANT = "challenge_warrant"  # Buyer challenging warranty 
+    RATE_TRANSACTION = "rate_transaction"    # Buyer rating transaction 
 
     @classmethod
     def get_default_twitter_actions(cls):
@@ -85,7 +85,7 @@ class ActionType(Enum):
         
     @classmethod
     def get_seller_actions(cls):
-        """返回一个只包含卖家专属动作的列表。"""
+        """Return a list containing only seller-specific actions."""
         return [
             cls.LIST_PRODUCT,
             cls.EXIT_MARKET,
@@ -94,13 +94,33 @@ class ActionType(Enum):
 
     @classmethod
     def get_buyer_actions(cls):
-        """返回一个只包含买家专属动作的列表。"""
+        """Return a list containing only buyer-specific actions."""
         return [
             cls.PURCHASE_PRODUCT_ID,
             cls.CHALLENGE_WARRANT,
             cls.RATE_TRANSACTION,
         ]
-        
+    
+    @classmethod
+    def get_market_actions(cls, market_type: str = 'reputation_and_warrant'):
+        """Return all relevant action list based on market type."""
+        if market_type == 'reputation_only':
+            return [
+                cls.LIST_PRODUCT,
+                cls.EXIT_MARKET,
+                cls.REENTER_MARKET,
+                cls.PURCHASE_PRODUCT_ID,
+                cls.RATE_TRANSACTION,
+            ]
+        else:  # Default 'reputation_and_warrant'
+            return [
+                cls.LIST_PRODUCT,
+                cls.EXIT_MARKET,
+                cls.REENTER_MARKET,
+                cls.PURCHASE_PRODUCT_ID,
+                cls.CHALLENGE_WARRANT,
+                cls.RATE_TRANSACTION,
+            ]    
 
 
 class RecsysType(Enum):
