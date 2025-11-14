@@ -18,14 +18,14 @@ class SimulationConfig:
     SIMULATION_ROUNDS = 7
 
     # Market parameters
-    MARKET_PARAMS = {  #TODO: Maybe it needs to be modified because it doesn't match Payoff Matrix.
+    MARKET_PARAMS = {                       #TODO: Maybe it needs to be modified because it doesn't match Payoff Matrix.
         "hq_cost": 2.0,
         "lq_cost": 1.0,
         "hq_price": 5.0,
         "lq_price": 3.0,
         "hq_utility": 8.0,
         "lq_utility": 5.0,
-        "warrant_escrow": 2.0,
+        "warrant_escrow": 5.0,
         "challenge_cost": 1.0,
     }
 

@@ -33,25 +33,30 @@ class Seller_prompt:
 
     # Payoff matrix descriptions for sellers in different markets
     PAYOFF_MATRIX: dict[str, str] = {
-        "reputation_only": (
+        "reputation_only": (  #TODO: Perhaps these costs and prices should be told directly to the agent, because Payoff Matrix does not match the actual situation.
             """
 | Your Secret Production (`product_quality`) | Your Advertisement (`advertised_quality`) | Your Profit      |
 | :----------------------------------------- | :---------------------------------------- | :--------------- |
 | HQ                                         | HQ                                        |         3        |
-| LQ                                         | LQ                                        |         2        |
+| HQ                                         | LQ                                        |         1        |
 | LQ                                         | HQ                                        |         4        |
+| LQ                                         | LQ                                        |         1        |
 
 Note: Producing LQ and selling as HQ earns the most profit (4 points) BUT damages your reputation!
 """
         ).strip(),
         "reputation_and_warrant": (
             """
-| Your Secret Production (`product_quality`) | Your Advertisement (`advertised_quality`) | Buyer Action              | Your Profit      |
-| :----------------------------------------- | :---------------------------------------- | :------------------------ | :--------------- |
-| HQ                                         | HQ                                        | Buys (No Challenge)       |         3        |
-| LQ                                         | LQ                                        | Buys (No Challenge)       |         2        |
-| LQ                                         | HQ                                        | Buys (No Challenge)       |         4        |
-| LQ                                         | HQ (with warrant)                         | Buys & Challenges Warrant |        -4        |
+| Your Secret Production (`product_quality`) | Your Advertisement (`advertised_quality`) |     Warrant     |    Your Profit(no challenges)    |  Your Profit (If Buyer challenge)
+| :----------------------------------------- | :---------------------------------------- | :-------------- |  :--------------- | :--------------- |
+| HQ                                         | HQ                                        |      True      |      3       |      4       |
+| HQ                                         | LQ                                        |      True      |      1       |      2       |
+| LQ                                         | HQ                                        |      True      |      4       |     -1       |
+| LQ                                         | LQ                                        |      True      |      1       |      3       |
+| HQ                                         | HQ                                        |     False      |      3       |    False     |
+| HQ                                         | LQ                                        |     False      |      1       |    False     |
+| LQ                                         | HQ                                        |     False      |      4       |    False     |
+| LQ                                         | LQ                                        |     False      |      1       |    False     |
 
 Note: If you offer a warrant on a misleading claim and get challenged, you lose 4 points!
 """
@@ -244,29 +249,35 @@ class Buyer_prompt:
 
     # Utility matrix descriptions for buyers in different markets
     PAYOFF_MATRIX: dict[str, str] = {
-        "reputation_only": (
+        "reputation_only": ( #TODO: Perhaps these costs and prices should be told directly to the agent, because Payoff Matrix does not match the actual situation.
+
             """
 | Product Quality Received | Advertised Quality | Your Utility |
 | :----------------------- | :----------------- | :----------- |
 | HQ                       | HQ                 |      3       |
+| HQ                       | LQ                 |      5       |
+| LQ                       | HQ                 |      0       |
 | LQ                       | LQ                 |      2       |
-| LQ                       | HQ                 |     -3       |
 
-Note: You get cheated when you pay for HQ but receive LQ (-3 points penalty)! You never get cheated buying LQ.
+Note: You get cheated when you pay for HQ but receive LQ (0 points penalty)! You never get cheated buying LQ.
 """
         ).strip(),
         "reputation_and_warrant": (
             """
 - Challenge Cost: $1
 
-| Product Quality | Advertised Quality | Your Action                      | Your Utility                     |
-| :-------------- | :----------------- | :------------------------------- | :------------------------------- |
-| HQ              | HQ                 | Buy                              |         3                        |
-| LQ              | LQ                 | Buy                              |         2                        |
-| LQ              | HQ                 | Buy (No Challenge)               |        -3                        |
-| LQ              | HQ (warranted)     | Buy & Challenge Successfully     |         4                        |
+| Product Quality Received | Advertised Quality |  Warranted   | Your Utility(no challenges) |  Your Utility(challenges) |
+| :----------------------- | :----------------- | :----------- | :----------- | :----------- |
+| HQ                       | HQ                 |      True    |      3       |      2       |
+| HQ                       | HQ                 |     False    |      3       |    False     |
+| HQ                       | LQ                 |      True    |      0       |      4       |
+| HQ                       | LQ                 |     False    |      0       |    False     |
+| LQ                       | HQ                 |      True    |      5       |      4       |
+| LQ                       | HQ                 |     False    |      5       |    False     |
+| LQ                       | LQ                 |      True    |      2       |      1       |
+| LQ                       | LQ                 |     False    |      2       |    False     |
 
-Note: You can only challenge warranted products. Successful challenges earn you 4 points total!
+Note: You can only challenge warranted products. Successful challenges earn you 2 points total!
 """
         ).strip(),
     }
