@@ -40,18 +40,6 @@ class UserInfo:
 
         return user_info_template.format(**self.profile)
 
-    def to_system_message(self) -> str:
-        """
-        Route to the correct master prompt generation function based on role and market type.
-        """
-        role = self.profile.get("other_info", {}).get("role")
-        
-        if role == 'seller':
-            return self.to_seller_master_prompt()
-        elif role == 'buyer':
-            return self.to_buyer_master_prompt()
-        return ""
-
     def to_reddit_system_message(self) -> str:
         name_string = ""
         description_string = ""

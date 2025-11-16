@@ -209,39 +209,91 @@ class SocialAgent(ChatAgent):
                 
             return response, action_reasoning
 
-    async def perform_action_by_llm(self, extra_action: List[Union[FunctionTool, Callable]] = None):
+    async def perform_communication_action(self, extra_action: List[Union[FunctionTool, Callable]] = None, extra_prompt: str = None, current_round: int = 1, market_phase: str = "general"):
         """
-        Original perform_action_by_llm function, keeping original functionality unchanged.
+        Execute market simulation actions, including environment observation and extra prompts.
+        
+        Args:
+            extra_action: Additional tool list
+            extra_prompt: Additional prompt information
+            current_round: Current round number
+            market_phase: Market phase ("communication", "general")
         """
-        role = self.user_info.profile.get("other_info", {}).get("role")
+        role = self.user_info.profile.get("role")
 
-        env_prompt = await self.env.to_text_prompt()
+        # Get corresponding environment observation based on market phase
+        env_prompt = await self.env.to_text_prompt(agent=self, current_round=current_round, market_phase=market_phase)
         agent_log.info(
-            f"Agent {self.social_agent_id} ({role}) observing environment: "
+            f"Agent {self.social_agent_id} ({role}) observing environment in {market_phase} phase: "
             f"{env_prompt}")
-
-        if role == 'seller':
-            user_msg_content = (
-                "Based on your system instructions, which include your "
-                "history and current state, you must now execute your "
-                "chosen action for this round."
-            )
-        elif role == 'buyer':
-            user_msg_content = (
-                "You have observed the current state of the market. "
-                "Based on your role, objectives, and the market rules "
-                "outlined in your system instructions, please decide on the "
-                "best action to take now.\n\n"
-                f"## Current Market Observation:\n{env_prompt}"
-            )
-        else:
-            user_msg_content = env_prompt
+            
+        # Combine environment observation and extra prompt
+        user_msg_content = f"{env_prompt}"
+        if extra_prompt:
+            user_msg_content += f"\n\n## Additional Information:\n{extra_prompt}"
+        user_msg_content += (
+            "\n## Notice:\n"
+            "You must use the `tool_call` to invoke the tool to perform the operation."
+            "When you execute a tool_call, you also need to explain your reasoning."
+        )
 
         user_msg = BaseMessage.make_user_message(
             role_name="User",
             content=user_msg_content
         )
 
+        if extra_action:
+            extra_tool = [self.all_possible_actions_dict[extra_action_name] for extra_action_name in extra_action]
+            self.add_tools(extra_tool)
+            
+        action_reasoning = ""
+        try:
+            response = await self.astep(user_msg) 
+            action_reasoning = response.msg.content
+            
+            # Inject agent_id into return results
+            if response.info and 'tool_calls' in response.info and response.info['tool_calls']:  
+                for tool_call in response.info['tool_calls']:
+                    action_name = tool_call.tool_name
+                    args = tool_call.args
+                    # Add agent_id to platform return result dictionary
+                    if isinstance(tool_call.result, dict):
+                        tool_call.result['agent_id'] = self.social_agent_id
+                    agent_log.info(f"Agent {self.social_agent_id} performed "
+                                f"action: {action_name} with args: {args}"
+                                f"and reasoning: {action_reasoning}")
+            else:
+                agent_log.warning(f"Agent {self.social_agent_id} did not perform any action. Reasoning: {action_reasoning}")
+
+        except Exception as e:
+            agent_log.error(f"Agent {self.social_agent_id} error: {e}")
+            response = e
+
+        finally:
+            if extra_action:
+                self.remove_tools(extra_action)
+                
+            return response, action_reasoning
+
+
+
+
+
+    async def perform_action_by_llm(self, extra_action: List[Union[FunctionTool, Callable]] = None):
+        """
+        Original perform_action_by_llm function, keeping original functionality unchanged.
+        """
+        role = self.user_info.profile.get("other_info", {}).get("role")
+
+        # Get posts:
+        env_prompt = await self.env.to_text_prompt()
+        user_msg = BaseMessage.make_user_message(
+            role_name="User",
+            content=(
+                f"Please perform social media actions after observing the "
+                f"platform environments. Notice that don't limit your "
+                f"actions for example to just like the posts. "
+                f"Here is your social media environment: {env_prompt}"))
         if extra_action:
             self.add_tools(extra_action)
         

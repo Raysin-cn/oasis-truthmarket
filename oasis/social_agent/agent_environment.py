@@ -98,6 +98,30 @@ class SocialEnvironment(Environment):
             conn.close()
         return listings
 
+    def get_posts_communication_for_env(self) -> str:
+        """Query all posts from database and format as string."""
+        if not os.path.exists(self.db_path):
+            return "No posts are currently available."
+            
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        posts = "No posts are currently available."
+        try:
+            cursor.execute(
+                "SELECT post_id, content FROM post WHERE status = 'on_sale' ORDER BY post_id DESC"
+            )
+            posts = cursor.fetchall()
+            if posts:
+                posts_env = "Here is the list of posts currently available:\n"
+                for p in posts:
+                    posts_env += f"- Post ID: {p[0]}, Content: {p[1]}\n"
+        except sqlite3.Error as e:
+            print(f"Database query error (get_posts_communication_for_env): {e}")
+        finally:
+            conn.close()
+        return posts_env
+    
+
     async def get_posts_env(self) -> str:
         posts = await self.action.refresh()
         # TODO: Replace posts json format string to other formats
@@ -166,7 +190,14 @@ class SocialEnvironment(Environment):
         
         role = agent.user_info.profile.get("role")
         
-        if market_phase == "listing" and role == "seller":
+        if market_phase == "communication":
+            available_posts = self.get_posts_communication_for_env()
+            return MarketEnv_prompt.SELLER_COMMUNICATION_ENV.format(
+                available_posts=available_posts
+            )
+        
+        
+        elif market_phase == "listing" and role == "seller":
             # Seller in listing phase: observe previous phase purchase feedback and current market status
             previous_feedback = self._get_previous_feedback(agent)
             available_products = self.get_product_listings_for_env()
@@ -239,6 +270,7 @@ class SocialEnvironment(Environment):
         current_round=1,
         market_phase="general",
     ) -> str:
+
         if self.is_market_sim:
             return self.get_market_environment(agent, current_round, market_phase)
         else:

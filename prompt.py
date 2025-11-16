@@ -434,6 +434,17 @@ While you wait, here's a reminder of the game mechanics:
 class MarketEnv_prompt:
     """Market environment-related prompts for different roles to observe environment information in different phases"""
 
+    # Environment observation for sellers in communication phase
+    SELLER_COMMUNICATION_ENV = TextPrompt(
+        """
+# MARKET ENVIRONMENT OBSERVATION
+
+## Available Posts for Communication
+{available_posts}
+
+"""
+    )
+
     # Environment observation for sellers in listing_product phase
     SELLER_LISTING_ENV = TextPrompt(
         """
