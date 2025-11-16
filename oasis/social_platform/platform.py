@@ -1647,25 +1647,25 @@ class Platform:
         except Exception as e:
             return {"success": False, "error": str(e)}
 
-    async def purchase_product_id(self, agent_id: int, post_id: int):
+    async def purchase_product_id(self, agent_id: int, product_id: int):
         """Handle buyer purchase product backend logic and return detailed results."""
         buyer_id = agent_id
         current_time = self.sandbox_clock.get_time_step()
 
         try:
             # Get product details including price and cost
-            post_check_query = """
+            product_check_query = """
                 SELECT user_id, status, advertised_quality, true_quality, has_warrant, 
                        price, cost
-                FROM post WHERE post_id = ?
+                FROM product WHERE product_id = ?
             """
-            self.pl_utils._execute_db_command(post_check_query, (post_id,))
-            post_result = self.db_cursor.fetchone()
+            self.pl_utils._execute_db_command(product_check_query, (product_id,))
+            product_result = self.db_cursor.fetchone()
 
-            if not post_result:
-                return {"success": False, "error": f"Product with ID {post_id} not found."}
+            if not product_result:
+                return {"success": False, "error": f"Product with ID {product_id} not found."}
             
-            seller_id, status, advertised_quality, true_quality, has_warrant, price, cost = post_result
+            seller_id, status, advertised_quality, true_quality, has_warrant, price, cost = product_result
             
             # Get buyer user_id
             buyer_info_query = "SELECT user_id FROM user WHERE agent_id = ?"
@@ -1692,19 +1692,19 @@ class Platform:
 
 
             # Update product status to sold
-            post_update_query = "UPDATE post SET is_sold = 1, status = 'sold' WHERE post_id = ?"
-            self.pl_utils._execute_db_command(post_update_query, (post_id,), commit=True)
+            product_update_query = "UPDATE product SET is_sold = 1, status = 'sold' WHERE product_id = ?"
+            self.pl_utils._execute_db_command(product_update_query, (product_id,), commit=True)
 
             # Insert transaction record with complete profit information
             transaction_insert_query = """
                 INSERT INTO transactions (
-                    post_id, seller_id, buyer_id, round_number, 
+                    product_id, seller_id, buyer_id, round_number, 
                     seller_profit, buyer_utility, created_at
                 ) VALUES (?, ?, ?, ?, ?, ?, ?)
             """
             self.pl_utils._execute_db_command(
                 transaction_insert_query,
-                (post_id, seller_id, buyer_id, self.sandbox_clock.get_round_step(), 
+                (product_id, seller_id, buyer_id, self.sandbox_clock.get_round_step(), 
                  seller_profit, buyer_utility, current_time),
                 commit=True
             )
@@ -1720,14 +1720,14 @@ class Platform:
                 (buyer_utility, buyer_id), commit=True
             )
 
-            action_info = {"post_id": post_id, "transaction_id": transaction_id}
+            action_info = {"product_id": product_id, "transaction_id": transaction_id}
             self.pl_utils._record_trace(buyer_id, ActionType.PURCHASE_PRODUCT_ID.value, action_info, current_time)
 
             return {
                 "success": True, 
                 "agent_id": buyer_id,
                 "transaction_id": transaction_id,
-                "post_id": post_id,
+                "product_id": product_id,
                 "seller_id": seller_id,
                 "advertised_quality": advertised_quality,
                 "true_quality": true_quality,
@@ -1763,7 +1763,7 @@ class Platform:
             self.pl_utils._execute_db_command("UPDATE user SET budget = budget - ? WHERE agent_id = ?", (cost, seller_id), commit=True)
 
             insert_query = (
-                "INSERT INTO post (user_id, created_at, true_quality, advertised_quality, price, cost, has_warrant, is_sold, status, round_number) "
+                "INSERT INTO product (user_id, created_at, true_quality, advertised_quality, price, cost, has_warrant, is_sold, status, round_number) "
                 "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
             )
             
@@ -1772,12 +1772,12 @@ class Platform:
                 (seller_id, current_time, prod_q, adv_q, price, cost, has_warrant, False, 'on_sale', round_number),
                 commit=True
             )
-            post_id = self.db_cursor.lastrowid
+            product_id = self.db_cursor.lastrowid
             
-            action_info = {"post_id": post_id, "details": product_details, "price": price}
+            action_info = {"product_id": product_id, "details": product_details, "price": price}
             self.pl_utils._record_trace(seller_id, ActionType.LIST_PRODUCT.value, action_info, current_time)
             
-            return {"success": True, "post_id": post_id, "price": price}
+            return {"success": True, "product_id": product_id, "price": price}
         except Exception as e:
             return {"success": False, "error": str(e)}
     
@@ -1817,13 +1817,13 @@ class Platform:
         current_time = self.sandbox_clock.get_time_step()
 
         try:
-            # 1. Find transaction and get seller ID and post ID
-            trans_query = "SELECT seller_id, post_id FROM transactions WHERE transaction_id = ?"
+            # 1. Find transaction and get seller ID and product ID
+            trans_query = "SELECT seller_id, product_id FROM transactions WHERE transaction_id = ?"
             self.pl_utils._execute_db_command(trans_query, (transaction_id,))
             result = self.db_cursor.fetchone()
             if not result:
                 return {"success": False, "error": f"Transaction {transaction_id} not found."}
-            seller_id, post_id = result
+            seller_id, product_id = result
 
             # Update rating in transaction table
             update_trans_query = "UPDATE transactions SET rating = ? WHERE transaction_id = ?"
@@ -1833,19 +1833,19 @@ class Platform:
             query = """
                 SELECT p.true_quality, p.advertised_quality, p.has_warrant, p.price, 
                        t.is_challenged, t.transaction_id, t.seller_profit, t.buyer_utility
-                FROM post p JOIN transactions t ON p.post_id = t.post_id
-                WHERE p.post_id = ? AND t.transaction_id = ?
+                FROM product p JOIN transactions t ON p.product_id = t.product_id
+                WHERE p.product_id = ? AND t.transaction_id = ?
             """
-            self.pl_utils._execute_db_command(query, (post_id, transaction_id))
+            self.pl_utils._execute_db_command(query, (product_id, transaction_id))
             result = self.db_cursor.fetchone()
 
             if not result:
-                return {"success": False, "error": f"Transaction record not found for buyer ID: {buyer_id} regarding product ID: {post_id}."}
+                return {"success": False, "error": f"Transaction record not found for buyer ID: {buyer_id} regarding product ID: {product_id}."}
             
             true_q, adv_q, has_warrant, price, is_challenged, transaction_id, original_seller_profit, original_buyer_utility = result
 
             if not has_warrant:
-                return {"success": False, "error": f"Product {post_id} has no warranty, cannot challenge."}
+                return {"success": False, "error": f"Product {product_id} has no warranty, cannot challenge."}
             if is_challenged:
                 return {"success": False, "error": f"You have already challenged this transaction."}
 
@@ -1854,7 +1854,7 @@ class Platform:
             buyer_reward = 0
             buyer_challenge_cost = self.market_params['challenge_cost']
             self.pl_utils._execute_db_command("UPDATE user SET profit_utility_score = profit_utility_score - ? WHERE user_id = ?", (buyer_challenge_cost, buyer_id), commit=True)
-            self.pl_utils._execute_db_command("UPDATE transactions SET is_challenged = 1, challenge_cost = ? WHERE post_id = ? AND buyer_id = ?", (buyer_challenge_cost, post_id, buyer_id), commit=True)
+            self.pl_utils._execute_db_command("UPDATE transactions SET is_challenged = 1, challenge_cost = ? WHERE product_id = ? AND buyer_id = ?", (buyer_challenge_cost, product_id, buyer_id), commit=True)
 
             # 4. Determine challenge result and settle
             challenge_successful = (true_q == 'LQ' and adv_q == 'HQ')
@@ -1884,10 +1884,10 @@ class Platform:
             # 5. Update budget and product status
             self.pl_utils._execute_db_command("UPDATE user SET budget = budget + ? WHERE user_id = ?", (buyer_reward-buyer_challenge_cost, buyer_id), commit=True)
             self.pl_utils._execute_db_command("UPDATE user SET budget = budget + ? WHERE user_id = ?", (-seller_penalty, seller_id), commit=True)
-            self.pl_utils._execute_db_command("UPDATE post SET status = ? WHERE post_id = ?", (status, post_id), commit=True)
+            self.pl_utils._execute_db_command("UPDATE product SET status = ? WHERE product_id = ?", (status, product_id), commit=True)
 
             # 6. Record in trace table
-            action_info = {"post_id": post_id, "successful": challenge_successful, "challenge_cost": buyer_challenge_cost, "seller_penalty": seller_penalty, "buyer_reward": buyer_reward}
+            action_info = {"product_id": product_id, "successful": challenge_successful, "challenge_cost": buyer_challenge_cost, "seller_penalty": seller_penalty, "buyer_reward": buyer_reward}
             self.pl_utils._record_trace(buyer_id, ActionType.CHALLENGE_WARRANT.value, action_info, current_time)
             
             return {"success": True, "challenge_successful": challenge_successful}

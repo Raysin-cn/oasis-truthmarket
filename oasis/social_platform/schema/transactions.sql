@@ -1,7 +1,7 @@
 -- This is the schema definition for the new transactions table
 CREATE TABLE transactions (
     transaction_id INTEGER PRIMARY KEY AUTOINCREMENT,
-    post_id INTEGER,
+    product_id INTEGER,
     seller_id INTEGER,
     buyer_id INTEGER,
     round_number INTEGER,
@@ -16,7 +16,7 @@ CREATE TABLE transactions (
     challenge_penalty REAL,
     -- Timestamp
     created_at INTEGER,
-    FOREIGN KEY(post_id) REFERENCES post(post_id),
+    FOREIGN KEY(product_id) REFERENCES product(product_id),
     FOREIGN KEY(seller_id) REFERENCES user(user_id),
     FOREIGN KEY(buyer_id) REFERENCES user(user_id)
 );

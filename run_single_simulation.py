@@ -116,15 +116,15 @@ def get_product_listings(database_path: str = None) -> str:
     cursor = conn.cursor()
     listings = "No products are currently on sale."
     try:
-        cursor.execute("PRAGMA table_info(post)")
+        cursor.execute("PRAGMA table_info(product)")
         columns = [info[1] for info in cursor.fetchall()]
         if 'status' not in columns:
-            return "Database schema is incorrect: 'post' table is missing the 'status' column."
+            return "Database schema is incorrect: 'product' table is missing the 'status' column."
         cursor.execute(
             """
-            SELECT p.post_id, u.agent_id, p.advertised_quality, p.price, p.has_warrant, 
+            SELECT p.product_id, u.agent_id, p.advertised_quality, p.price, p.has_warrant, 
                    COALESCE(u.reputation_score, 0) AS reputation_score
-            FROM post p
+            FROM product p
             LEFT JOIN user u ON u.user_id = p.user_id
             WHERE p.status = 'on_sale'
             """
@@ -161,9 +161,9 @@ def get_seller_round_summary(seller_id: int, round_num: int, database_path: str 
         user_result = cursor.fetchone()
         user_id = user_result[0]
         
-        # Query in post table by user_id and round_number
+        # Query in product table by user_id and round_number
         cursor.execute(
-            "SELECT advertised_quality, true_quality, has_warrant, is_sold, cost, price FROM post WHERE user_id = ? AND round_number = ? ORDER BY post_id",
+            "SELECT advertised_quality, true_quality, has_warrant, is_sold, cost, price FROM product WHERE user_id = ? AND round_number = ? ORDER BY product_id",
             (user_id, round_num)
         )
         summary = {"advertised_quality": None, "true_quality": None, "warrant": None, "is_sold": 0, "sold_numbers": 0, "cost": 0, "price": 0}
@@ -422,7 +422,7 @@ async def run_single_simulation(database_path: str):
                 # Store purchase information in agent for environment observation
                 agent.last_purchase_info = {
                     'transaction_id': purchase_info.get("transaction_id"),
-                    'post_id': purchase_info.get("post_id"),
+                    'product_id': purchase_info.get("product_id"),
                     'advertised_quality': purchase_info.get("advertised_quality"),
                     'true_quality': purchase_info.get("true_quality"),
                     'has_warrant': purchase_info.get("has_warrant"),

@@ -76,9 +76,9 @@ class SocialEnvironment(Environment):
         try:
             cursor.execute(
                 """
-                SELECT p.post_id, p.user_id, p.advertised_quality, p.price, p.has_warrant,
+                SELECT p.product_id, p.user_id, p.advertised_quality, p.price, p.has_warrant,
                     COALESCE(u.reputation_score, 0) AS reputation_score
-                FROM post p
+                FROM product p
                 LEFT JOIN user u ON u.user_id = p.user_id
                 WHERE p.status = 'on_sale'
                 """
@@ -229,7 +229,7 @@ class SocialEnvironment(Environment):
             
             return MarketEnv_prompt.BUYER_RATING_ENV.format(
                 transaction_id=purchase_info.get('transaction_id', 'N/A'),
-                post_id=purchase_info.get('post_id', 'N/A'),
+                product_id=purchase_info.get('product_id', 'N/A'),
                 advertised_quality=purchase_info.get('advertised_quality', 'N/A'),
                 true_quality=purchase_info.get('true_quality', 'N/A'),
                 has_warrant=purchase_info.get('has_warrant', False),

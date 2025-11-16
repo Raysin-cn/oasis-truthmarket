@@ -232,16 +232,16 @@ class Buyer_prompt:
     ACTIONS: dict[str, str] = {
         "reputation_only": (
             "Available Actions:\n"
-            "1. `purchase_product_id(post_id: int)`: Purchase a product by its post_id\n"
+            "1. `purchase_product_id(product_id: int)`: Purchase a product by its product_id\n"
             "2. `rate_transaction(transaction_id: int, rating: int)`: Rate a transaction after purchase\n"
             "   - rating scale: -2 (very bad), -1 (bad), 0 (neutral), +1 (good), +2 (very good)\n"
         ),
         "reputation_and_warrant": (
             "Available Actions:\n"
-            "1. `purchase_product_id(post_id: int)`: Purchase a product by its post_id\n"
+            "1. `purchase_product_id(product_id: int)`: Purchase a product by its product_id\n"
             "2. `rate_transaction(transaction_id: int, rating: int)`: Rate a transaction after purchase\n"
             "   - rating scale: -2 (very bad), -1 (bad), 0 (neutral), +1 (good), +2 (very good)\n"
-            "3. `challenge_warrant(post_id: int)`: Challenge a warranted product after purchase (costs $1)\n"
+            "3. `challenge_warrant(product_id: int)`: Challenge a warranted product after purchase (costs $1)\n"
             "   - Only use if you received LQ when HQ was advertised with a warrant\n"
             "   - Successful challenge earns you 4 points!\n"
         ),
@@ -493,7 +493,7 @@ Remember: You never get cheated buying LQ. You can get cheated buying HQ. Use re
 
 ## Your Recent Purchase Details
 - Transaction ID: {transaction_id}
-- Product ID: {post_id}
+- Product ID: {product_id}
 - Advertised Quality: {advertised_quality}
 - True Quality Received: {true_quality}
 - Was Warranted: {has_warrant}
