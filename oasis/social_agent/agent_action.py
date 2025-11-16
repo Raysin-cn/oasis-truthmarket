@@ -794,14 +794,14 @@ class SocialAction:
         """
         return await self.perform_action(None, ActionType.REENTER_MARKET.value)
 
-    async def purchase_product_id(self, post_id: int):
+    async def purchase_product_id(self, product_id: int):
         """
-        Purchases a product based on its unique post ID.
+        Purchases a product based on its unique product ID.
 
         Args:
-            post_id (int): The unique identifier for the product listing to be purchased.
+            product_id (int): The unique identifier for the product listing to be purchased.
         """
-        return await self.perform_action(post_id, ActionType.PURCHASE_PRODUCT_ID.value)
+        return await self.perform_action(product_id, ActionType.PURCHASE_PRODUCT_ID.value)
 
     async def challenge_warrant(self, transaction_id: int, rating: int):
         """

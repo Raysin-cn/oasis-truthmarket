@@ -232,16 +232,16 @@ class Buyer_prompt:
     ACTIONS: dict[str, str] = {
         "reputation_only": (
             "Available Actions:\n"
-            "1. `purchase_product_id(post_id: int)`: Purchase a product by its post_id\n"
+            "1. `purchase_product_id(product_id: int)`: Purchase a product by its product_id\n"
             "2. `rate_transaction(transaction_id: int, rating: int)`: Rate a transaction after purchase\n"
             "   - rating scale: -2 (very bad), -1 (bad), 0 (neutral), +1 (good), +2 (very good)\n"
         ),
         "reputation_and_warrant": (
             "Available Actions:\n"
-            "1. `purchase_product_id(post_id: int)`: Purchase a product by its post_id\n"
+            "1. `purchase_product_id(product_id: int)`: Purchase a product by its product_id\n"
             "2. `rate_transaction(transaction_id: int, rating: int)`: Rate a transaction after purchase\n"
             "   - rating scale: -2 (very bad), -1 (bad), 0 (neutral), +1 (good), +2 (very good)\n"
-            "3. `challenge_warrant(post_id: int)`: Challenge a warranted product after purchase (costs $1)\n"
+            "3. `challenge_warrant(product_id: int)`: Challenge a warranted product after purchase (costs $1)\n"
             "   - Only use if you received LQ when HQ was advertised with a warrant\n"
             "   - Successful challenge earns you 4 points!\n"
         ),
@@ -434,6 +434,17 @@ While you wait, here's a reminder of the game mechanics:
 class MarketEnv_prompt:
     """Market environment-related prompts for different roles to observe environment information in different phases"""
 
+    # Environment observation for sellers in communication phase
+    SELLER_COMMUNICATION_ENV = TextPrompt(
+        """
+# MARKET ENVIRONMENT OBSERVATION
+
+## Available Posts for Communication
+{available_posts}
+
+"""
+    )
+
     # Environment observation for sellers in listing_product phase
     SELLER_LISTING_ENV = TextPrompt(
         """
@@ -482,7 +493,7 @@ Remember: You never get cheated buying LQ. You can get cheated buying HQ. Use re
 
 ## Your Recent Purchase Details
 - Transaction ID: {transaction_id}
-- Product ID: {post_id}
+- Product ID: {product_id}
 - Advertised Quality: {advertised_quality}
 - True Quality Received: {true_quality}
 - Was Warranted: {has_warrant}

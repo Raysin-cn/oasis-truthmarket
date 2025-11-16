@@ -39,7 +39,7 @@ def print_round_statistics(round_num: int, db_path: str = ""):
         cursor.execute("""
             SELECT COUNT(*), SUM(p.price), AVG(p.price)
             FROM transactions t 
-            JOIN post p ON t.post_id = p.post_id 
+            JOIN product p ON t.product_id = p.product_id 
             WHERE t.round_number = ?
         """, (round_num,))
         transaction_stats = cursor.fetchone()
@@ -68,7 +68,7 @@ def clear_market(db_path: str = ""):
     cursor = conn.cursor()
     try:
         # Update all products with status 'on_sale' to 'expired'
-        cursor.execute("UPDATE post SET status = 'expired' WHERE status = 'on_sale'")
+        cursor.execute("UPDATE product SET status = 'expired' WHERE status = 'on_sale'")
         conn.commit()
         # Get number of affected rows for debugging
         changes = conn.total_changes
@@ -94,7 +94,7 @@ def print_simulation_summary(db_path: str = ""):
         cursor.execute("""
             SELECT COUNT(*), SUM(p.price), AVG(p.price)
             FROM transactions t 
-            JOIN post p ON t.post_id = p.post_id
+            JOIN product p ON t.product_id = p.product_id
         """)
         total_stats = cursor.fetchone()
         if total_stats and total_stats[0] > 0:

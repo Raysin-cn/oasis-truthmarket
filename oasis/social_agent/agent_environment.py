@@ -76,9 +76,9 @@ class SocialEnvironment(Environment):
         try:
             cursor.execute(
                 """
-                SELECT p.post_id, p.user_id, p.advertised_quality, p.price, p.has_warrant,
+                SELECT p.product_id, p.user_id, p.advertised_quality, p.price, p.has_warrant,
                     COALESCE(u.reputation_score, 0) AS reputation_score
-                FROM post p
+                FROM product p
                 LEFT JOIN user u ON u.user_id = p.user_id
                 WHERE p.status = 'on_sale'
                 """
@@ -97,6 +97,30 @@ class SocialEnvironment(Environment):
         finally:
             conn.close()
         return listings
+
+    def get_posts_communication_for_env(self) -> str:
+        """Query all posts from database and format as string."""
+        if not os.path.exists(self.db_path):
+            return "No posts are currently available."
+            
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        posts = "No posts are currently available."
+        try:
+            cursor.execute(
+                "SELECT post_id, content FROM post WHERE status = 'on_sale' ORDER BY post_id DESC"
+            )
+            posts = cursor.fetchall()
+            if posts:
+                posts_env = "Here is the list of posts currently available:\n"
+                for p in posts:
+                    posts_env += f"- Post ID: {p[0]}, Content: {p[1]}\n"
+        except sqlite3.Error as e:
+            print(f"Database query error (get_posts_communication_for_env): {e}")
+        finally:
+            conn.close()
+        return posts_env
+    
 
     async def get_posts_env(self) -> str:
         posts = await self.action.refresh()
@@ -156,7 +180,7 @@ class SocialEnvironment(Environment):
             groups_env = "No groups."
         return groups_env
 
-    def get_market_environment(self, agent=None, current_round=1, market_phase="general") -> str:
+    async def get_market_environment(self, agent=None, current_round=1, market_phase="general") -> str:
         """Get environment information for market simulation, providing different observation content based on different market phases."""
         from prompt import MarketEnv_prompt
         
@@ -166,7 +190,16 @@ class SocialEnvironment(Environment):
         
         role = agent.user_info.profile.get("role")
         
-        if market_phase == "listing" and role == "seller":
+        if market_phase == "communication":
+            posts = await self.action.refresh()
+            if posts["success"]:
+                posts_env = json.dumps(posts["posts"], indent=4)
+                posts_env = self.posts_env_template.substitute(posts=posts_env)
+            else:
+                posts_env = "After refreshing, there are no existing posts."
+            return posts_env
+        
+        elif market_phase == "listing" and role == "seller":
             # Seller in listing phase: observe previous phase purchase feedback and current market status
             previous_feedback = self._get_previous_feedback(agent)
             available_products = self.get_product_listings_for_env()
@@ -198,7 +231,7 @@ class SocialEnvironment(Environment):
             
             return MarketEnv_prompt.BUYER_RATING_ENV.format(
                 transaction_id=purchase_info.get('transaction_id', 'N/A'),
-                post_id=purchase_info.get('post_id', 'N/A'),
+                product_id=purchase_info.get('product_id', 'N/A'),
                 advertised_quality=purchase_info.get('advertised_quality', 'N/A'),
                 true_quality=purchase_info.get('true_quality', 'N/A'),
                 has_warrant=purchase_info.get('has_warrant', False),
@@ -239,8 +272,9 @@ class SocialEnvironment(Environment):
         current_round=1,
         market_phase="general",
     ) -> str:
+
         if self.is_market_sim:
-            return self.get_market_environment(agent, current_round, market_phase)
+            return await self.get_market_environment(agent, current_round, market_phase)
         else:
             followers_env = (await self.get_followers_env()
                             if include_follows else "No followers.")
