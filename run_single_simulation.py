@@ -360,7 +360,8 @@ async def run_single_simulation(database_path: str):
 
                 seller_actions[agent] = LLMAction(
                     extra_action=listing_tools,
-                    extra_prompt=seller_round_prompt
+                    extra_prompt=seller_round_prompt,
+                    level="market"
                 )
         
         if seller_actions:
@@ -390,7 +391,8 @@ async def run_single_simulation(database_path: str):
                 purchase_tools = ['purchase_product_id']
                 buyer_actions[agent] = LLMAction(
                     extra_action=purchase_tools,
-                    extra_prompt=buyer_round_prompt
+                    extra_prompt=buyer_round_prompt,
+                    level="market"
                 )
         
         purchase_results = []
@@ -440,7 +442,8 @@ async def run_single_simulation(database_path: str):
                 )
                 post_purchase_actions[agent] = LLMAction(
                     extra_action=rating_tools,
-                    extra_prompt=buyer_rating_prompt  # Environment observation information will be provided through market_phase="rating"
+                    extra_prompt=buyer_rating_prompt,  # Environment observation information will be provided through market_phase="rating"
+                    level="market"
                 )
         
         if post_purchase_actions:

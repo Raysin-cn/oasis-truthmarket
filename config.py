@@ -35,6 +35,7 @@ class SimulationConfig:
     INITIAL_WINDOW_ROUNDS = [1, 2]  # Initial rounds with hidden complete history
     EXIT_ROUND = 7  # Exit market allowed rounds
     MARKET_TYPE = 'reputation_only'
+    COMMUNICATION_TYPE = 'none'  # Communication type: 'none', 'seller', 'buyer', 'both'
     
     # Model configuration
     MODEL_PLATFORM = "openai"
@@ -86,6 +87,7 @@ class SimulationConfig:
             'INITIAL_WINDOW_ROUNDS': cls.INITIAL_WINDOW_ROUNDS,
             'EXIT_ROUND': cls.EXIT_ROUND,
             'MARKET_TYPE': cls.MARKET_TYPE,
+            'COMMUNICATION_TYPE': cls.COMMUNICATION_TYPE,
             'MODEL_PLATFORM': cls.MODEL_PLATFORM,
             'MODEL_TYPE': cls.MODEL_TYPE
         }

@@ -36,6 +36,39 @@ class MultiRunAnalyzer:
         self.paths = SimulationConfig.get_experiment_paths(experiment_id)
         self.run_data = {}
         self.aggregated_data = {}
+        self.config = self._load_config()
+    
+    def _load_config(self) -> Dict[str, Any]:
+        """Load experiment configuration from config.json"""
+        config_file = self.paths['config_file']
+        if os.path.exists(config_file):
+            try:
+                with open(config_file, 'r', encoding='utf-8') as f:
+                    return json.load(f)
+            except Exception as e:
+                print(f"Warning: Could not load config file: {e}")
+                return {}
+        return {}
+    
+    def _get_experiment_title_suffix(self) -> str:
+        """Generate title suffix based on configuration"""
+        parts = []
+        market_type = self.config.get('MARKET_TYPE', 'unknown')
+        comm_type = self.config.get('COMMUNICATION_TYPE', 'none')
+        
+        # Format market type
+        if market_type == 'reputation_only':
+            parts.append('Reputation-Only')
+        elif market_type == 'reputation_warrant':
+            parts.append('Reputation+Warrant')
+        else:
+            parts.append(market_type.replace('_', ' ').title())
+        
+        # Format communication type
+        if comm_type and comm_type != 'none':
+            parts.append(f'{comm_type.title()} Comm.')
+        
+        return ' | '.join(parts) if parts else ''
         
     def load_experiment_data(self):
         """Load experiment data"""
@@ -71,7 +104,7 @@ class MultiRunAnalyzer:
             'run_id': run_id,
             'transactions': read_table(conn, 'transactions'),
             'user': read_table(conn, 'user'),
-            'post': read_table(conn, 'post'),
+            'product': read_table(conn, 'product'),
             'reputation_history': read_table(conn, 'reputation_history'),
             'trace': read_table(conn, 'trace')
         }
@@ -183,17 +216,17 @@ class MultiRunAnalyzer:
         
         for run_id, data in self.run_data.items():
             transactions = data['transactions']
-            posts = data.get('post', pd.DataFrame())
+            products = data.get('product', pd.DataFrame())
             
             if not transactions.empty:
                 run_ids.append(run_id)
                 
-                # 关联 transactions 和 post 表来区分 honest 和 dishonest 收益
-                if not posts.empty and 'post_id' in transactions.columns:
+                # 关联 transactions 和 product 表来区分 honest 和 dishonest 收益
+                if not products.empty and 'product_id' in transactions.columns:
                     # 合并数据以获取 advertised_quality 和 true_quality
                     merged = transactions.merge(
-                        posts[['post_id', 'advertised_quality', 'true_quality']],
-                        on='post_id',
+                        products[['product_id', 'advertised_quality', 'true_quality']],
+                        on='product_id',
                         how='left'
                     )
                     
@@ -262,7 +295,8 @@ class MultiRunAnalyzer:
         seller_profits = data['seller_profits']
         
         fig, ax = plt.subplots(figsize=(8, 6))
-        fig.suptitle(f'Seller Profits Comparison - Experiment {self.experiment_id}', fontsize=14)
+        title_suffix = self._get_experiment_title_suffix()
+        fig.suptitle(f'Seller Profits Comparison ({title_suffix})', fontsize=14)
         
         # 先绘制 honest 收益（绿色，底层）
         ax.bar(run_ids, honest_profits, alpha=0.7, color='green', label='Honest Profit')
@@ -302,7 +336,8 @@ class MultiRunAnalyzer:
         buyer_utilities = data['buyer_utilities']
         
         fig, ax = plt.subplots(figsize=(8, 6))
-        fig.suptitle(f'Buyer Utilities Comparison - Experiment {self.experiment_id}', fontsize=14)
+        title_suffix = self._get_experiment_title_suffix()
+        fig.suptitle(f'Buyer Utilities Comparison ({title_suffix})', fontsize=14)
         
         ax.bar(run_ids, buyer_utilities, alpha=0.7, color='lightgreen')
         ax.axhline(y=np.mean(buyer_utilities), color='red', linestyle='--',
@@ -328,7 +363,8 @@ class MultiRunAnalyzer:
         transaction_counts = data['transaction_counts']
         
         fig, ax = plt.subplots(figsize=(8, 6))
-        fig.suptitle(f'Transaction Counts Comparison - Experiment {self.experiment_id}', fontsize=14)
+        title_suffix = self._get_experiment_title_suffix()
+        fig.suptitle(f'Transaction Counts Comparison ({title_suffix})', fontsize=14)
         
         # 先绘制 honest 交易数量（绿色，底层）
         ax.bar(run_ids, honest_transaction_counts, alpha=0.7, color='green', label='Honest Transactions')
@@ -369,7 +405,8 @@ class MultiRunAnalyzer:
         buyer_utilities = data['buyer_utilities']
         
         fig, ax = plt.subplots(figsize=(8, 6))
-        fig.suptitle(f'Profit vs Utility Scatter - Experiment {self.experiment_id}', fontsize=14)
+        title_suffix = self._get_experiment_title_suffix()
+        fig.suptitle(f'Profit vs Utility Scatter ({title_suffix})', fontsize=14)
         
         ax.scatter(seller_profits, buyer_utilities, alpha=0.7, s=60)
         ax.set_title('Seller Profits vs Buyer Utilities')
@@ -403,7 +440,8 @@ class MultiRunAnalyzer:
         
         # Create plots
         fig, axes = plt.subplots(2, 2, figsize=(12, 10))
-        fig.suptitle(f'Cross-Run Comparison Analysis - Experiment {self.experiment_id}', fontsize=14)
+        title_suffix = self._get_experiment_title_suffix()
+        fig.suptitle(f'Cross-Run Comparison Analysis ({title_suffix})', fontsize=14)
         
         # 1. Seller total profit comparison (堆叠图)
         # 先绘制 honest 收益（绿色，底层）
@@ -500,7 +538,8 @@ class MultiRunAnalyzer:
         
         # Create plots
         fig, axes = plt.subplots(1, 3, figsize=(15, 5))
-        fig.suptitle(f'Round Progression Analysis - Experiment {self.experiment_id}', fontsize=14)
+        title_suffix = self._get_experiment_title_suffix()
+        fig.suptitle(f'Round Progression Analysis ({title_suffix})', fontsize=14)
         
         # 1. Seller profit progression
         axes[0].errorbar(rounds, avg_seller_profits, yerr=std_seller_profits, 
@@ -550,7 +589,8 @@ class MultiRunAnalyzer:
         
         # Create plots
         fig, axes = plt.subplots(2, 3, figsize=(15, 10))
-        fig.suptitle(f'Distribution Analysis - Experiment {self.experiment_id}', fontsize=14)
+        title_suffix = self._get_experiment_title_suffix()
+        fig.suptitle(f'Distribution Analysis ({title_suffix})', fontsize=14)
         
         # First row: Histograms
         # Seller profit distribution
@@ -624,19 +664,19 @@ class MultiRunAnalyzer:
         }
         
         for run_id, data in self.run_data.items():
-            posts = data.get('post')
-            if posts is None or posts.empty:
+            products = data.get('product')
+            if products is None or products.empty:
                 continue
             
             # Count number of deceptions (advertised HQ but actual LQ)
-            deceptions = posts[
-                (posts['advertised_quality'] == 'HQ') & 
-                (posts['true_quality'] == 'LQ')
+            deceptions = products[
+                (products['advertised_quality'] == 'HQ') & 
+                (products['true_quality'] == 'LQ')
             ]
             total_deceptions = len(deceptions)
             
             # Calculate deception rate
-            hq_advertised = len(posts[posts['advertised_quality'] == 'HQ'])
+            hq_advertised = len(products[products['advertised_quality'] == 'HQ'])
             deception_rate = total_deceptions / hq_advertised if hq_advertised > 0 else 0
             
             stats['total_deceptions_by_run'][run_id] = total_deceptions
@@ -696,7 +736,8 @@ class MultiRunAnalyzer:
         
         # Create plots
         fig, axes = plt.subplots(2, 2, figsize=(14, 10))
-        fig.suptitle(f'Seller Deception Behavior Analysis - Experiment {self.experiment_id}', 
+        title_suffix = self._get_experiment_title_suffix()
+        fig.suptitle(f'Seller Deception Behavior Analysis ({title_suffix})', 
                     fontsize=14, fontweight='bold')
         
         run_ids = sorted(deception_stats['total_deceptions_by_run'].keys())
@@ -877,7 +918,7 @@ def main():
     """Command-line entry point"""
     import argparse
     parser = argparse.ArgumentParser(description='Analyze multi-run experiment results')
-    parser.add_argument('--experiment_id', help='Experiment ID', default='experiment_20251103_102825')
+    parser.add_argument('--experiment_id', help='Experiment ID', default='experiment_20251116_154648')
     args = parser.parse_args()
     
     asyncio.run(analyze_experiment(args.experiment_id))

@@ -54,6 +54,39 @@ def load_experiment_data(exp_id):
     with open(stats_file, 'r', encoding='utf-8') as f:
         return json.load(f)
 
+
+def load_experiment_config(exp_id):
+    """Load experiment configuration"""
+    config_file = f"experiments/{exp_id}/config.json"
+    if os.path.exists(config_file):
+        try:
+            with open(config_file, 'r', encoding='utf-8') as f:
+                return json.load(f)
+        except Exception as e:
+            print(f"Warning: Could not load config for {exp_id}: {e}")
+    return {}
+
+
+def format_experiment_label(config):
+    """Format experiment label from configuration"""
+    parts = []
+    market_type = config.get('MARKET_TYPE', 'unknown')
+    comm_type = config.get('COMMUNICATION_TYPE', 'none')
+    
+    # Format market type
+    if market_type == 'reputation_only':
+        parts.append('Rep-Only')
+    elif market_type == 'reputation_warrant':
+        parts.append('Rep+Warrant')
+    else:
+        parts.append(market_type.replace('_', ' ').title())
+    
+    # Format communication type
+    if comm_type and comm_type != 'none':
+        parts.append(f'{comm_type.title()}Comm')
+    
+    return ' | '.join(parts) if parts else 'Unknown'
+
 def create_deception_behavior_comparison(output_dir):
     """Create deception behavior comparison chart - TQ=Low and AQ=High instances
     
@@ -96,7 +129,7 @@ def create_deception_behavior_comparison(output_dir):
                 cursor = conn.cursor()
                 # Count instances where true_quality='LQ' and advertised_quality='HQ'
                 cursor.execute("""
-                    SELECT COUNT(*) FROM post 
+                    SELECT COUNT(*) FROM product 
                     WHERE true_quality = 'LQ' AND advertised_quality = 'HQ'
                 """)
                 deception_count = cursor.fetchone()[0]
@@ -118,7 +151,7 @@ def create_deception_behavior_comparison(output_dir):
                 cursor = conn.cursor()
                 # Count instances where true_quality='LQ' and advertised_quality='HQ'
                 cursor.execute("""
-                    SELECT COUNT(*) FROM post 
+                    SELECT COUNT(*) FROM product 
                     WHERE true_quality = 'LQ' AND advertised_quality = 'HQ'
                 """)
                 deception_count = cursor.fetchone()[0]
@@ -440,7 +473,16 @@ def create_distribution_comparison(output_dir):
 def main():
     """Generate all comparison charts"""
     print("Generating market mechanism comparison charts...")
-
+    
+    # Load configurations for both experiments
+    config_rep_only = load_experiment_config(EXPERIMENT_CONFIG['reputation_only'])
+    config_rep_warrant = load_experiment_config(EXPERIMENT_CONFIG['reputation_warrant'])
+    
+    label_rep_only = format_experiment_label(config_rep_only)
+    label_rep_warrant = format_experiment_label(config_rep_warrant)
+    
+    print(f"Experiment 1: {label_rep_only}")
+    print(f"Experiment 2: {label_rep_warrant}")
     
     # Create timestamped output directory
     output_dir = create_output_directory()
@@ -450,8 +492,12 @@ def main():
     config = {
         'generation_time': datetime.now().isoformat(),
         'experiment_ids': EXPERIMENT_CONFIG,
+        'experiment_labels': {
+            'reputation_only': label_rep_only,
+            'reputation_warrant': label_rep_warrant
+        },
         'charts_generated': [],
-        'description': 'Market mechanism comparison between Reputation-Only and Reputation+Warrant systems'
+        'description': f'Market mechanism comparison: {label_rep_only} vs {label_rep_warrant}'
     }
     
     try:
