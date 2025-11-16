@@ -102,7 +102,7 @@ def _compute_round_series(cursor: sqlite3.Cursor, seller_id: int):
     cursor.execute(
         """
         SELECT p.round_number, p.advertised_quality, p.true_quality, p.price, p.has_warrant
-        FROM post p
+        FROM product p
         WHERE p.user_id = ? AND p.round_number IS NOT NULL
         ORDER BY p.round_number ASC
         """,

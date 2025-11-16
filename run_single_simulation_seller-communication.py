@@ -109,10 +109,12 @@ def get_seller_round_summary(seller_id: int, round_num: int, database_path: str 
     """Get seller's product listing information and sales status for a specific round."""
     if database_path is None:
         database_path = os.environ.get('MARKET_DB_PATH', 'market_sim.db')
-        
+    
+    # Initialize summary with default values outside try block
+    summary = {"advertised_quality": None, "true_quality": None, "warrant": None, "is_sold": 0, "sold_numbers": 0, "cost": 0, "price": 0}
+    
     conn = sqlite3.connect(database_path)
     cursor = conn.cursor()
-    summary = {"advertised_quality": None, "true_quality": None, "warrant": None, "is_sold": 0, "sold_numbers": 0, "cost": 0, "price": 0}
     try:
         # First get user_id from agent_id
         cursor.execute(
