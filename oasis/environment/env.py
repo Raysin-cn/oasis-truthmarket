@@ -130,7 +130,12 @@ class OasisEnv:
         async with self.llm_semaphore:
             extra_action = llm_action.extra_action if hasattr(llm_action, 'extra_action') else None
             extra_prompt = llm_action.extra_prompt if hasattr(llm_action, 'extra_prompt') else None
-            return await agent.perform_market_action(extra_action, extra_prompt, self.current_round, self.market_phase)
+            level = llm_action.level if hasattr(llm_action, 'level') else None
+            if level == 'market':
+                return await agent.perform_market_action(extra_action, extra_prompt, self.current_round, self.market_phase)
+            elif level == 'communication':
+                return await agent.perform_communication_action(extra_action, extra_prompt, self.current_round, self.market_phase)
+
 
     async def _perform_interview_action(self, agent, interview_prompt: str):
         r"""Send the request to the llm model and execute the interview.

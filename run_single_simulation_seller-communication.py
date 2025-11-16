@@ -112,6 +112,7 @@ def get_seller_round_summary(seller_id: int, round_num: int, database_path: str 
         
     conn = sqlite3.connect(database_path)
     cursor = conn.cursor()
+    summary = {"advertised_quality": None, "true_quality": None, "warrant": None, "is_sold": 0, "sold_numbers": 0, "cost": 0, "price": 0}
     try:
         # First get user_id from agent_id
         cursor.execute(
@@ -121,12 +122,11 @@ def get_seller_round_summary(seller_id: int, round_num: int, database_path: str 
         user_result = cursor.fetchone()
         user_id = user_result[0]
         
-        # Query in post table by user_id and round_number
+        # Query in product table by user_id and round_number
         cursor.execute(
-            "SELECT advertised_quality, true_quality, has_warrant, is_sold, cost, price FROM post WHERE user_id = ? AND round_number = ? ORDER BY post_id",
+            "SELECT advertised_quality, true_quality, has_warrant, is_sold, cost, price FROM product WHERE user_id = ? AND round_number = ? ORDER BY product_id",
             (user_id, round_num)
         )
-        summary = {"advertised_quality": None, "true_quality": None, "warrant": None, "is_sold": 0, "sold_numbers": 0, "cost": 0, "price": 0}
         all_result = cursor.fetchall()
         if all_result:
             one_result = all_result[0]
@@ -278,6 +278,44 @@ async def run_single_simulation(database_path: str):
         if round_num > SimulationConfig.EXIT_ROUND:
             print("Sellers may exit market. (soft flag)")
         
+        # Seller communication
+        print(f"\n--- [Round {round_num}] Seller Communication Phase ---")
+        seller_communication_actions = {}
+        
+        # Set environment market phase to communication
+        env.market_phase = "communication"
+        
+        for agent_id, agent in agent_graph.get_agents():
+            if agent.user_info.profile.get("role") == 'seller':
+                state = get_agent_state(agent_id, 'seller', round_num=round_num, database_path=database_path)
+
+                # Hide complete history in initial window (show only aggregated/summary or empty)
+                history_log = sellers_history.get(agent_id, [])
+                visible_history_string = format_seller_history(history_log)
+                
+                # Update environment state
+                env.current_round = round_num
+
+                # System prompt already set during SocialAgent instantiation (static parameters)
+                # Prepare round prompt (dynamic parameters)
+                seller_communication_round_prompt = (
+                    "\n\nIn this phase, you are allowed to perform the some social platform actions to communicate with a seller. "
+                    "You cannot perform any other actions during this phase.\n"
+                    "You can share the plan of listing product, product information, your experience, or any other information with the seller to help them make a listing_product decision. "
+                )
+                # Tools available for sellers in communication phase: only allow social platform actions
+                communication_tools = ['create_post', 'quote_post', 'like_post', 'dislike_post']
+                seller_communication_actions[agent] = LLMAction(
+                    extra_action=communication_tools,
+                    extra_prompt=seller_communication_round_prompt,
+                    level = "communication"
+                )
+        if seller_communication_actions:
+            await env.step(seller_communication_actions)
+        print("All seller communication actions are complete.")
+
+
+
         # Seller actions
         print(f"\n--- [Round {round_num}] Seller Action Phase ---")
         seller_actions = {}
@@ -318,44 +356,14 @@ async def run_single_simulation(database_path: str):
 
                 seller_actions[agent] = LLMAction(
                     extra_action=listing_tools,
-                    extra_prompt=seller_round_prompt
+                    extra_prompt=seller_round_prompt,
+                    level = "market"
                 )
         
         if seller_actions:
             await env.step(seller_actions)
         print("All seller actions are complete.")
 
-
-        # Seller communication
-        print(f"\n--- [Round {round_num}] Seller Communication Phase ---")
-        seller_communication_actions = {}
-        
-        # Set environment market phase to communication
-        env.market_phase = "communication"
-        
-        for agent_id, agent in agent_graph.get_agents():
-            if agent.user_info.profile.get("role") == 'seller':
-                state = get_agent_state(agent_id, 'seller', round_num=round_num, database_path=database_path)
-                # Update agent state attributes
-                agent.reputation_score = state['reputation_score']
-                agent.history_summary = visible_history_string
-                
-                # System prompt already set during SocialAgent instantiation (static parameters)
-                # Prepare round prompt (dynamic parameters)
-                seller_communication_round_prompt = (
-                    "\n\nIn this phase, you are allowed to perform the some social platform actions to communicate with a seller. "
-                    "You cannot perform any other actions during this phase.\n"
-                    "You can share the plan of listing product, product information, your experience, or any other information with the seller to help them make a listing_product decision. "
-                )
-                # Tools available for sellers in communication phase: only allow social platform actions
-                communication_tools = ['create_post', 'quote_post']
-                seller_communication_actions[agent] = LLMAction(
-                    extra_action=communication_tools,
-                    extra_prompt=seller_communication_round_prompt
-                )
-        if seller_communication_actions:
-            await env.step(seller_communication_actions)
-        print("All seller communication actions are complete.")
 
         print(f"\n--- [Round {round_num}] Buyer Action Phase 1: Purchase ---")
         buyer_actions = {}
@@ -380,7 +388,8 @@ async def run_single_simulation(database_path: str):
                 purchase_tools = ['purchase_product_id']
                 buyer_actions[agent] = LLMAction(
                     extra_action=purchase_tools,
-                    extra_prompt=buyer_round_prompt
+                    extra_prompt=buyer_round_prompt,
+                    level = "market"
                 )
         
         purchase_results = []
@@ -414,7 +423,7 @@ async def run_single_simulation(database_path: str):
                 # Store purchase information in agent for environment observation
                 agent.last_purchase_info = {
                     'transaction_id': purchase_info.get("transaction_id"),
-                    'post_id': purchase_info.get("post_id"),
+                    'product_id': purchase_info.get("product_id"),
                     'advertised_quality': purchase_info.get("advertised_quality"),
                     'true_quality': purchase_info.get("true_quality"),
                     'has_warrant': purchase_info.get("has_warrant"),
@@ -430,7 +439,8 @@ async def run_single_simulation(database_path: str):
                 )
                 post_purchase_actions[agent] = LLMAction(
                     extra_action=rating_tools,
-                    extra_prompt=buyer_rating_prompt  # Environment observation information will be provided through market_phase="rating"
+                    extra_prompt=buyer_rating_prompt,  # Environment observation information will be provided through market_phase="rating"
+                    level = "market"
                 )
         
         if post_purchase_actions:

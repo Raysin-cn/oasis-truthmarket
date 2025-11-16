@@ -180,7 +180,7 @@ class SocialEnvironment(Environment):
             groups_env = "No groups."
         return groups_env
 
-    def get_market_environment(self, agent=None, current_round=1, market_phase="general") -> str:
+    async def get_market_environment(self, agent=None, current_round=1, market_phase="general") -> str:
         """Get environment information for market simulation, providing different observation content based on different market phases."""
         from prompt import MarketEnv_prompt
         
@@ -191,11 +191,13 @@ class SocialEnvironment(Environment):
         role = agent.user_info.profile.get("role")
         
         if market_phase == "communication":
-            available_posts = self.get_posts_communication_for_env()
-            return MarketEnv_prompt.SELLER_COMMUNICATION_ENV.format(
-                available_posts=available_posts
-            )
-        
+            posts = await self.action.refresh()
+            if posts["success"]:
+                posts_env = json.dumps(posts["posts"], indent=4)
+                posts_env = self.posts_env_template.substitute(posts=posts_env)
+            else:
+                posts_env = "After refreshing, there are no existing posts."
+            return posts_env
         
         elif market_phase == "listing" and role == "seller":
             # Seller in listing phase: observe previous phase purchase feedback and current market status
@@ -272,7 +274,7 @@ class SocialEnvironment(Environment):
     ) -> str:
 
         if self.is_market_sim:
-            return self.get_market_environment(agent, current_round, market_phase)
+            return await self.get_market_environment(agent, current_round, market_phase)
         else:
             followers_env = (await self.get_followers_env()
                             if include_follows else "No followers.")
