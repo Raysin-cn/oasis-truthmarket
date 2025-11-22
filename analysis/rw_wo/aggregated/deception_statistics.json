@@ -1,0 +1,37 @@
+{
+  "experiment_id": "rw_wo",
+  "total_runs": 10,
+  "deceptions_per_run": {
+    "8": 15,
+    "3": 12,
+    "4": 11,
+    "1": 12,
+    "9": 11,
+    "5": 12,
+    "10": 12,
+    "7": 13,
+    "6": 11,
+    "2": 10
+  },
+  "deception_rates_per_run": {
+    "8": 0.3333333333333333,
+    "3": 0.27906976744186046,
+    "4": 0.2391304347826087,
+    "1": 0.26666666666666666,
+    "9": 0.2619047619047619,
+    "5": 0.2857142857142857,
+    "10": 0.2553191489361702,
+    "7": 0.3023255813953488,
+    "6": 0.24444444444444444,
+    "2": 0.25
+  },
+  "overall_statistics": {
+    "avg_deceptions_per_run": 11.9,
+    "std_deceptions_per_run": 1.3,
+    "max_deceptions_per_run": 15,
+    "min_deceptions_per_run": 10,
+    "avg_deception_rate": 0.27179084246194807,
+    "std_deception_rate": 0.02766111073101517,
+    "total_deceptions_all_runs": 119
+  }
+}

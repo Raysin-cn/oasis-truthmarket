@@ -149,9 +149,8 @@ class OasisEnv:
                                                           LLMAction]]]]
     ) -> List[Dict[str, Any]]: 
         r"""Update the recommendation system and perform the actions."""
-        await self.platform.update_rec_table()
-        env_log.info("update rec table.")
-
+        # await self.platform.update_rec_table()
+        # env_log.info("update rec table.")
         tasks = []
         for agent, action in actions.items():
             if isinstance(action, list):
@@ -185,11 +184,15 @@ class OasisEnv:
                 for tool_call in response.info['tool_calls']:
                     if tool_call.result:
                         results.append(tool_call.result)
+            elif response and hasattr(response, 'success') and response.success:
+                results.append(response)
+            else:
+                results.append(response)
 
         env_log.info("performed all actions.")
         
-        if self.platform_type == DefaultPlatformType.REDDIT:
-            self.platform.sandbox_clock.time_step += 1
+        # if self.platform_type == DefaultPlatformType.REDDIT:
+        #     self.platform.sandbox_clock.time_step += 1
             
         return results
 

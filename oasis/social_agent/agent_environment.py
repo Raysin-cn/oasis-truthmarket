@@ -202,7 +202,6 @@ class SocialEnvironment(Environment):
         elif market_phase == "listing" and role == "seller":
             # Seller in listing phase: observe previous phase purchase feedback and current market status
             previous_feedback = self._get_previous_feedback(agent)
-            available_products = self.get_product_listings_for_env()
             total_profit = getattr(agent, 'total_profit', 0)
             
             return MarketEnv_prompt.SELLER_LISTING_ENV.format(
@@ -210,7 +209,6 @@ class SocialEnvironment(Environment):
                 current_round=current_round,
                 reputation_score=agent.reputation_score,
                 total_profit=total_profit,
-                available_products=available_products
             )
             
         elif market_phase == "purchase" and role == "buyer":

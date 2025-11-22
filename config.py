@@ -34,14 +34,14 @@ class SimulationConfig:
     REENTRY_ALLOWED_ROUND = 5  # Re-entry market allowed rounds
     INITIAL_WINDOW_ROUNDS = [1, 2]  # Initial rounds with hidden complete history
     EXIT_ROUND = 7  # Exit market allowed rounds
-    MARKET_TYPE = 'reputation_only'
+    MARKET_TYPE = 'reputation_and_warrant'
     COMMUNICATION_TYPE = 'none'  # Communication type: 'none', 'seller', 'buyer', 'both'
     
     # Model configuration
     MODEL_PLATFORM = "openai"
     # MODEL_PLATFORM = "vllm"
-    # MODEL_TYPE = "gpt-4o-mini"
-    MODEL_TYPE = "gpt-4o"
+    MODEL_TYPE = "gpt-4o-mini"
+    # MODEL_TYPE = "gpt-4.1"
     # MODEL_TYPE = "MiniMax-M2"
     # MODEL_TYPE = "Qwen3-8B"
     

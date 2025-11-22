@@ -286,44 +286,6 @@ async def run_single_simulation(database_path: str, market_type: str = None):
         if round_num > SimulationConfig.EXIT_ROUND:
             print("Sellers may exit market. (soft flag)")
         
-        # Seller communication
-        print(f"\n--- [Round {round_num}] Seller Communication Phase ---")
-        seller_communication_actions = {}
-        
-        # Set environment market phase to communication
-        env.market_phase = "communication"
-        
-        for agent_id, agent in agent_graph.get_agents():
-            if agent.user_info.profile.get("role") == 'seller':
-                state = get_agent_state(agent_id, 'seller', round_num=round_num, database_path=database_path)
-
-                # Hide complete history in initial window (show only aggregated/summary or empty)
-                history_log = sellers_history.get(agent_id, [])
-                visible_history_string = format_seller_history(history_log)
-                
-                # Update environment state
-                env.current_round = round_num
-
-                # System prompt already set during SocialAgent instantiation (static parameters)
-                # Prepare round prompt (dynamic parameters)
-                seller_communication_round_prompt = (
-                    "\n\nIn this phase, you are allowed to perform the some social platform actions to communicate with a seller. "
-                    "You cannot perform any other actions during this phase.\n"
-                    "You can share the plan of listing product, product information, your experience, or any other information with the seller to help them make a listing_product decision. "
-                )
-                # Tools available for sellers in communication phase: only allow social platform actions
-                communication_tools = ['create_post', 'quote_post', 'like_post', 'dislike_post']
-                seller_communication_actions[agent] = LLMAction(
-                    extra_action=communication_tools,
-                    extra_prompt=seller_communication_round_prompt,
-                    level = "communication"
-                )
-        if seller_communication_actions:
-            await env.step(seller_communication_actions)
-        print("All seller communication actions are complete.")
-
-
-
         # Seller actions
         print(f"\n--- [Round {round_num}] Seller Action Phase ---")
         seller_actions = {}
@@ -372,6 +334,40 @@ async def run_single_simulation(database_path: str, market_type: str = None):
             await env.step(seller_actions)
         print("All seller actions are complete.")
 
+        # Buyer communication
+        print(f"\n--- [Round {round_num}] Buyer Communication Phase ---")
+        buyer_communication_actions = {}
+        
+        # Set environment market phase to communication
+        env.market_phase = "communication"
+        
+        for agent_id, agent in agent_graph.get_agents():
+            if agent.user_info.profile.get("role") == 'buyer':
+                state = get_agent_state(agent_id, 'buyer', round_num=round_num, database_path=database_path)
+                
+                # Update agent state attributes
+                agent.cumulative_utility = state['cumulative_utility']
+                
+                # Update environment state
+                env.current_round = round_num
+
+                # System prompt already set during SocialAgent instantiation (static parameters)
+                # Prepare round prompt (dynamic parameters)
+                buyer_communication_round_prompt = (
+                    "\n\nIn this phase, you are allowed to perform some social platform actions to communicate with other buyers. "
+                    "You cannot perform any other actions during this phase.\n"
+                    "You can share your purchase experience, product information, seller reputation, or any other information with other buyers to help them make a purchase decision. "
+                )
+                # Tools available for buyers in communication phase: only allow social platform actions
+                communication_tools = ['create_post', 'quote_post', 'like_post', 'dislike_post']
+                buyer_communication_actions[agent] = LLMAction(
+                    extra_action=communication_tools,
+                    extra_prompt=buyer_communication_round_prompt,
+                    level = "communication"
+                )
+        if buyer_communication_actions:
+            await env.step(buyer_communication_actions)
+        print("All buyer communication actions are complete.")
 
         print(f"\n--- [Round {round_num}] Buyer Action Phase 1: Purchase ---")
 

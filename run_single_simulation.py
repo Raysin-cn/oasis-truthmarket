@@ -7,6 +7,7 @@ import asyncio
 import sqlite3
 import os
 import oasis
+import random
 from camel.models import ModelFactory
 from camel.types import ModelPlatformType, ModelType
 from oasis import SocialAgent, AgentGraph, UserInfo, make
@@ -239,11 +240,12 @@ def initialize_market_roles(agent_graph: AgentGraph, database_path: str = None):
         conn.close()
 
 
-async def run_single_simulation(database_path: str):
+async def run_single_simulation(database_path: str, market_type: str = None):
     """Run single market simulation
     
     Args:
         database_path: Database file path
+        market_type: Market type (optional, defaults to config value)
     """
     print("Starting market simulation initialization...")
     
@@ -252,7 +254,10 @@ async def run_single_simulation(database_path: str):
     
     # Set environment variables
     os.environ['MARKET_DB_PATH'] = database_path
-    
+
+    if market_type is None:
+        market_type = SimulationConfig.MARKET_TYPE
+
     # Clean up existing database
     if os.path.exists(database_path):
         os.remove(database_path)
@@ -272,7 +277,7 @@ async def run_single_simulation(database_path: str):
         agents_num=SimulationConfig.NUM_SELLERS,
         sys_prompt=SELLER_GENERATION_SYS_PROMPT,
         user_prompt=SELLER_GENERATION_USER_PROMPT,
-        market_type=SimulationConfig.MARKET_TYPE,
+        market_type=market_type,
         role="seller",
         model=model,
         db_path=database_path,
@@ -284,7 +289,7 @@ async def run_single_simulation(database_path: str):
         agents_num=SimulationConfig.NUM_BUYERS,
         sys_prompt=BUYER_GENERATION_SYS_PROMPT,
         user_prompt=BUYER_GENERATION_USER_PROMPT,
-        market_type=SimulationConfig.MARKET_TYPE,
+        market_type=market_type,
         role="buyer",
         model=model,
         db_path=database_path,
@@ -369,35 +374,42 @@ async def run_single_simulation(database_path: str):
         print("All seller actions are complete.")
 
         print(f"\n--- [Round {round_num}] Buyer Action Phase 1: Purchase ---")
-        buyer_actions = {}
+
         
         # Set environment market phase to purchase
         env.market_phase = "purchase"
 
-        for agent_id, agent in agent_graph.get_agents():
-             if agent.user_info.profile.get("role") == 'buyer':
-                state = get_agent_state(agent_id, 'buyer', round_num=round_num, database_path=database_path)
-                # Update agent state attributes
-                agent.cumulative_utility = state['cumulative_utility']
-                
-                # System prompt already set during SocialAgent instantiation (static parameters)
-                # Prepare round prompt (dynamic parameters)
-                buyer_round_prompt = (
-                    "\n\nIn this phase, you are only allowed to perform the purchase_product_id action to purchase a product. "
-                    "Based on the market environment, product information, and your preferences, choose whether and which product to purchase. "
-                    "You cannot perform any other actions during this phase.\n"
-                )
-                # Tools available for buyers in purchase phase: only allow purchase
-                purchase_tools = ['purchase_product_id']
-                buyer_actions[agent] = LLMAction(
-                    extra_action=purchase_tools,
-                    extra_prompt=buyer_round_prompt,
-                    level="market"
-                )
-        
         purchase_results = []
-        if buyer_actions:
-            purchase_results = await env.step(buyer_actions)
+        agent_lists = agent_graph.get_agents()
+        # Shuffle and select buyers randomly
+        buyers = [pair for pair in agent_lists if pair[1].user_info.profile.get("role") == "buyer"]
+        random.shuffle(buyers)
+        for agent_id, agent in buyers:
+            buyer_actions = {}
+            state = get_agent_state(agent_id, 'buyer', round_num=round_num, database_path=database_path)
+            # Update agent state attributes
+            agent.cumulative_utility = state['cumulative_utility']
+            
+            # System prompt already set during SocialAgent instantiation (static parameters)
+            # Prepare round prompt (dynamic parameters)
+            buyer_round_prompt = (
+                "\n\nIn this phase, you are only allowed to perform the purchase_product_id action to purchase a product. "
+                "Based on the market environment, product information, and your preferences, choose whether and which product to purchase. "
+                "You cannot perform any other actions during this phase.\n"
+            )
+            # Tools available for buyers in purchase phase: only allow purchase
+            purchase_tools = ['purchase_product_id']
+            buyer_actions[agent] = LLMAction(
+                extra_action=purchase_tools,
+                extra_prompt=buyer_round_prompt,
+                level="market"
+            )
+            results = await env.step(buyer_actions)
+            # env.step returns a list, so extend instead of append
+            if isinstance(results, list):
+                purchase_results.extend(results)
+            elif isinstance(results, dict):
+                purchase_results.append(results)
         print("All purchase actions are attempted.")
 
         # Seller re-entry mechanism: After REENTRY_ALLOWED_ROUND, allow marked manipulators/low-reputation sellers to re-enter (interface left here, actual control can depend on platform layer)
@@ -421,7 +433,7 @@ async def run_single_simulation(database_path: str):
                 agent = agent_graph.get_agent(agent_id)
 
                 # Tools available for buyers in rating phase: only allow challenge warrant and rating
-                rating_tools = ['rate_transaction'] if SimulationConfig.MARKET_TYPE == 'reputation_only' else ['rate_transaction', 'challenge_warrant']
+                rating_tools = ['rate_transaction'] if market_type == 'reputation_only' else ['rate_transaction', 'challenge_warrant']
                 
                 # Store purchase information in agent for environment observation
                 agent.last_purchase_info = {
@@ -436,8 +448,8 @@ async def run_single_simulation(database_path: str):
                     'seller_reputation': purchase_info.get("seller_reputation", 0)
                 }
                 buyer_rating_prompt = (
-                    "\n\nIn this phase, you are allowed to perform the rate_transaction action to rate a transaction. " + "Or perform the challenge_warrant action to challenge the warrant of a transaction." if SimulationConfig.MARKET_TYPE == 'reputation_only' else "Or perform the challenge_warrant action to challenge the warrant of a transaction."
-                    "Based on the market environment, product information, and your preferences, choose whether and which product to rate. " + "Or challenge the warrant of a transaction." if SimulationConfig.MARKET_TYPE == 'reputation_only' else "Or challenge the warrant of a transaction."
+                    "\n\nIn this phase, you are allowed to perform the rate_transaction action to rate a transaction. " + "Or perform the challenge_warrant action to challenge the warrant of a transaction." if market_type == 'reputation_only' else "Or perform the challenge_warrant action to challenge the warrant of a transaction."
+                    "Based on the market environment, product information, and your preferences, choose whether and which product to rate. " + "Or challenge the warrant of a transaction." if market_type == 'reputation_only' else "Or challenge the warrant of a transaction."
                     "You cannot perform any other actions during this phase.\n"
                 )
                 post_purchase_actions[agent] = LLMAction(
@@ -450,7 +462,7 @@ async def run_single_simulation(database_path: str):
             await env.step(post_purchase_actions)
         print("All post-purchase actions are complete.")
 
-        clear_market(database_path)
+        # clear_market(database_path) 
         
         # Print round statistics
         print_round_statistics(round_num, database_path)
@@ -518,4 +530,5 @@ if __name__ == "__main__":
     # Allow direct running of single simulation for testing
     import sys
     db_path = sys.argv[1] if len(sys.argv) > 1 else "test_single_run.db"
-    asyncio.run(run_single_simulation(db_path))
+    market_type = sys.argv[2] if len(sys.argv) > 2 else None
+    asyncio.run(run_single_simulation(db_path, market_type=market_type))
