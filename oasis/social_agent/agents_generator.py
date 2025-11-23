@@ -566,7 +566,8 @@ async def generate_custom_agents(
     sign_up_tasks = [
         agent.env.action.sign_up(user_name=agent.user_info.user_name,
                                  name=agent.user_info.name,
-                                 bio=agent.user_info.description)
+                                 bio=agent.user_info.description,
+                                 initial_budget=agent.initial_budget)
         for _, agent in agent_graph.get_agents()
     ]
     await asyncio.gather(*sign_up_tasks)
@@ -710,9 +711,6 @@ async def generate_agent_from_LLM(agents_num:int,
         template = get_prompt_child(role, "MASTER_PROMPT", market_type)
         
         profile = {
-            "nodes": [],
-            "edges": [],
-            "other_info": {},
             # Add static key-value pairs required by System_prompt template
             "user_profile": agent_info["user_char"],
             "role": role,

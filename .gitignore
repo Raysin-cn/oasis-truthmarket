@@ -215,5 +215,6 @@ __marimo__/
 experiments/
 analysis/experiment_*
 analysis/comparison_*
+analysis/agent_analysis
 comparisions
 configs
