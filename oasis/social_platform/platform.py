@@ -1676,8 +1676,8 @@ class Platform:
             
             self.pl_utils._execute_db_command("SELECT budget FROM user WHERE agent_id = ?", (buyer_id,))
             current_budget = self.db_cursor.fetchone()[0]
-            # if current_budget < price:
-            #     raise ValueError(f"Not enough budget to purchase this product. Current budget: {current_budget}, Price: {price}")
+            if current_budget < price:
+                raise ValueError(f"Not enough budget to purchase this product. Current budget: {current_budget}, Price: {price}")
             
             
             # Calculate seller profit: selling price - production cost - warranty cost
@@ -1757,8 +1757,8 @@ class Platform:
 
             self.pl_utils._execute_db_command("SELECT budget FROM user WHERE agent_id = ?", (seller_id,))
             current_budget = self.db_cursor.fetchone()[0]
-            # if current_budget < cost:
-            #     raise ValueError(f"Not enough budget to list product. Current budget: {current_budget}, Cost: {cost}")
+            if current_budget < cost:
+                raise ValueError(f"Not enough budget to list product. Current budget: {current_budget}, Cost: {cost}")
 
             self.pl_utils._execute_db_command("UPDATE user SET budget = budget - ? WHERE agent_id = ?", (cost, seller_id), commit=True)
 
@@ -1868,17 +1868,24 @@ class Platform:
                 buyer_reward = self.market_params['warrant_escrow'] + buyer_challenge_cost
                 self.pl_utils._execute_db_command("UPDATE user SET profit_utility_score = profit_utility_score + ? WHERE user_id = ?", (buyer_reward, buyer_id), commit=True)
                 
-                # Update challenge result in transaction record
+                # Calculate new seller_profit and buyer_utility after challenge
+                new_seller_profit = original_seller_profit - seller_penalty
+                new_buyer_utility = original_buyer_utility + buyer_reward - buyer_challenge_cost
+                
+                # Update challenge result and profit/utility in transaction record
                 self.pl_utils._execute_db_command(
-                    "UPDATE transactions SET challenge_reward = ?, challenge_penalty = ? WHERE transaction_id = ?",
-                    (buyer_reward, seller_penalty, transaction_id), commit=True
+                    "UPDATE transactions SET challenge_reward = ?, challenge_penalty = ?, seller_profit = ?, buyer_utility = ? WHERE transaction_id = ?",
+                    (buyer_reward, seller_penalty, new_seller_profit, new_buyer_utility, transaction_id), commit=True
                 )
             else:
                 status = 'challenged_fail'
                 # Challenge failed, buyer loses challenge cost
+                new_seller_profit = original_seller_profit  # Seller profit unchanged
+                new_buyer_utility = original_buyer_utility - buyer_challenge_cost  # Buyer loses challenge cost
+                
                 self.pl_utils._execute_db_command(
-                    "UPDATE transactions SET challenge_reward = 0, challenge_penalty = 0 WHERE transaction_id = ?",
-                    (transaction_id,), commit=True
+                    "UPDATE transactions SET challenge_reward = 0, challenge_penalty = 0, seller_profit = ?, buyer_utility = ? WHERE transaction_id = ?",
+                    (new_seller_profit, new_buyer_utility, transaction_id), commit=True
                 )
             
             # 5. Update budget and product status

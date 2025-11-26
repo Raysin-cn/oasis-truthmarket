@@ -2,6 +2,7 @@
 import argparse
 import os
 import sqlite3
+import json
 from datetime import datetime
 
 import pandas as pd
@@ -35,11 +36,47 @@ def plot_save(fig: plt.Figure, out_dir: str, name: str) -> None:
     plt.close(fig)
 
 
+def load_config_from_db_path(db_path: str) -> dict:
+    """Load configuration from config.json based on database path"""
+    # Try to find config.json in the same directory as database
+    db_dir = os.path.dirname(os.path.abspath(db_path))
+    config_file = os.path.join(db_dir, 'config.json')
+    
+    if os.path.exists(config_file):
+        try:
+            with open(config_file, 'r', encoding='utf-8') as f:
+                return json.load(f)
+        except Exception as e:
+            print(f"Warning: Could not load config file: {e}")
+    return {}
+
+
+def get_title_suffix(config: dict) -> str:
+    """Generate title suffix based on configuration"""
+    parts = []
+    market_type = config.get('MARKET_TYPE', 'unknown')
+    comm_type = config.get('COMMUNICATION_TYPE', 'none')
+    
+    # Format market type
+    if market_type == 'reputation_only':
+        parts.append('Reputation-Only')
+    elif market_type == 'reputation_warrant':
+        parts.append('Reputation+Warrant')
+    else:
+        parts.append(market_type.replace('_', ' ').title())
+    
+    # Format communication type
+    if comm_type and comm_type != 'none':
+        parts.append(f'{comm_type.title()} Comm.')
+    
+    return ' | '.join(parts) if parts else ''
+
+
 def summarize_basic(conn: sqlite3.Connection) -> dict:
     summary = {}
     cur = conn.cursor()
     try:
-        for t in ["user", "post", "transactions", "reputation_history", "trace"]:
+        for t in ["user", "product", "transactions", "reputation_history", "trace"]:
             cur.execute("SELECT COUNT(1) FROM sqlite_master WHERE type='table' AND name=?", (t,))
             exists = cur.fetchone()[0] == 1
             summary[f"has_{t}"] = exists
@@ -51,7 +88,7 @@ def summarize_basic(conn: sqlite3.Connection) -> dict:
     return summary
 
 
-def plot_reputation_over_rounds(reph: pd.DataFrame, out_dir: str) -> None:
+def plot_reputation_over_rounds(reph: pd.DataFrame, out_dir: str, title_suffix: str = '') -> None:
     if reph.empty:
         return
     # Expect columns: round, seller_id, public_reputation_score
@@ -93,7 +130,8 @@ def plot_reputation_over_rounds(reph: pd.DataFrame, out_dir: str) -> None:
         linewidth=1.6,
     )
     g.set_axis_labels("Round", "Public Reputation Score (offset for visibility)")
-    g.fig.suptitle("Seller Reputation Over Rounds", y=1.04)
+    title = f"Seller Reputation Over Rounds ({title_suffix})" if title_suffix else "Seller Reputation Over Rounds"
+    g.fig.suptitle(title, y=1.04)
     # Improve legend placement
     if g._legend is not None:
         g._legend.set_title("Seller ID")
@@ -103,15 +141,15 @@ def plot_reputation_over_rounds(reph: pd.DataFrame, out_dir: str) -> None:
     plt.close(g.fig)
 
 
-def plot_avg_price_by_advertised_quality(conn: sqlite3.Connection, out_dir: str) -> None:
-    posts = read_table(conn, "post")
-    if posts.empty:
+def plot_avg_price_by_advertised_quality(conn: sqlite3.Connection, out_dir: str, title_suffix: str = '') -> None:
+    products = read_table(conn, "product")
+    if products.empty:
         return
     required = {"round_number", "advertised_quality", "price"}
-    if not required.issubset(posts.columns):
+    if not required.issubset(products.columns):
         return
 
-    df = posts[list(required)].copy()
+    df = products[list(required)].copy()
     df = df.dropna(subset=["round_number", "advertised_quality", "price"])  # keep valid rows
     if df.empty:
         return
@@ -150,29 +188,30 @@ def plot_avg_price_by_advertised_quality(conn: sqlite3.Connection, out_dir: str)
             label=f"{q} (mean±std)",
         )
 
-    ax.set_title("Average Listing Price per Round by Advertised Quality")
+    title = f"Average Listing Price per Round by Advertised Quality ({title_suffix})" if title_suffix else "Average Listing Price per Round by Advertised Quality"
+    ax.set_title(title)
     ax.set_xlabel("Round")
     ax.set_ylabel("Price (mean ± std)")
     ax.legend(title="Advertised Quality")
     plot_save(fig, out_dir, "avg_price_by_advertised_quality")
 
 
-def plot_seller_actions_scatter(conn: sqlite3.Connection, out_dir: str) -> None:
+def plot_seller_actions_scatter(conn: sqlite3.Connection, out_dir: str, title_suffix: str = '') -> None:
     """Scatter: x=Round, y=Seller ID.
     - Listing (circle 'o'), color by (adv_q, true_q):
         HQ/HQ -> deep blue, LQ/LQ -> light blue, HQ/LQ -> deep red, others -> gray
     - Re-entry (square 's'), Exit (triangle '^')
     """
-    posts = read_table(conn, "post")
+    products = read_table(conn, "product")
     trace = read_table(conn, "trace")
-    if posts.empty and trace.empty:
+    if products.empty and trace.empty:
         return
 
-    # Build listing points from post table
+    # Build listing points from product table
     list_df = pd.DataFrame()
     req_p = {"user_id", "round_number", "advertised_quality", "true_quality"}
-    if not posts.empty and req_p.issubset(posts.columns):
-        list_df = posts[list(req_p)].copy()
+    if not products.empty and req_p.issubset(products.columns):
+        list_df = products[list(req_p)].copy()
         list_df = list_df.rename(columns={"user_id": "seller_id", "round_number": "round",
                                           "advertised_quality": "adv_q", "true_quality": "true_q"})
         list_df = list_df.dropna(subset=["seller_id", "round"])
@@ -250,7 +289,8 @@ def plot_seller_actions_scatter(conn: sqlite3.Connection, out_dir: str) -> None:
             ax.scatter(ex_df["round"], ex_df["seller_id"], c="#444444", marker="^", s=80,
                        edgecolor="white", linewidth=0.6, label="exit_market")
 
-    ax.set_title("Seller Actions by Round")
+    title = f"Seller Actions by Round ({title_suffix})" if title_suffix else "Seller Actions by Round"
+    ax.set_title(title)
     ax.set_xlabel("Round")
     ax.set_ylabel("Seller ID")
     # Custom legend for listing color semantics
@@ -406,6 +446,10 @@ def main():
 
     out_dir = ensure_output_dir(os.path.dirname(os.path.abspath(args.db_path))) if args.out_dir is None else args.out_dir
     os.makedirs(out_dir, exist_ok=True)
+    
+    # Load configuration
+    config = load_config_from_db_path(args.db_path)
+    title_suffix = get_title_suffix(config)
 
     with sqlite3.connect(args.db_path) as conn:
         summary = summarize_basic(conn)
@@ -424,9 +468,9 @@ def main():
         sns.set_theme(style="whitegrid")
         
         # Basic market analysis
-        plot_reputation_over_rounds(reph, out_dir)
-        plot_avg_price_by_advertised_quality(conn, out_dir)
-        plot_seller_actions_scatter(conn, out_dir)
+        plot_reputation_over_rounds(reph, out_dir, title_suffix)
+        plot_avg_price_by_advertised_quality(conn, out_dir, title_suffix)
+        plot_seller_actions_scatter(conn, out_dir, title_suffix)
         
         # Manipulator analysis visualizations (if data available)
         if has_manipulator_data:

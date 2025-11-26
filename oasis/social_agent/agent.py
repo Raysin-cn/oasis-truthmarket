@@ -14,7 +14,9 @@
 from __future__ import annotations
 
 import inspect
+import json
 import logging
+import re
 import sys
 from datetime import datetime
 from typing import TYPE_CHECKING, Any, Callable, List, Optional, Union
@@ -167,8 +169,30 @@ class SocialAgent(ChatAgent):
             user_msg_content += f"\n\n## Additional Information:\n{extra_prompt}"
         user_msg_content += (
             "\n## Notice:\n"
-            "You must use the `tool_call` to invoke the tool to perform the operation."
-            "When you execute a tool_call, you also need to explain your reasoning."
+            """
+            You can execute your action in either of the following ways:
+            
+            1. **Preferred method**: Use tool_call to directly call the available tools.
+            2. **Alternative method**: If tool_call is not available, output your action as JSON:
+            
+            <THOUGHT>
+            1. Analyze the current situation and requirements.
+            2. Determine the best action to take.
+            3. Explain your reasoning for the selected action and the specific parameters you will use.
+            </THOUGHT>
+            
+            <ACTION>
+            {
+                "function_name": "name_of_the_function",
+                "arguments": {
+                    "param1": "value1",
+                    "param2": "value2"
+                }
+            }
+            </ACTION>
+            
+            **IMPORTANT**: The JSON in <ACTION> must be valid JSON format. Do NOT add any comments (// or /* */) inside the JSON. All explanations should be in the <THOUGHT> section, not in the JSON itself.
+            """
         )
 
         user_msg = BaseMessage.make_user_message(
@@ -177,41 +201,73 @@ class SocialAgent(ChatAgent):
         )
 
         if extra_action:
-            extra_tool = [self.all_possible_actions_dict[extra_action_name] for extra_action_name in extra_action]
+            extra_tool = [self.all_possible_actions_dict[extra_action_name] 
+                         for extra_action_name in extra_action 
+                         if extra_action_name in self.all_possible_actions_dict]
             self.add_tools(extra_tool)
-            
+        
         action_reasoning = ""
+        action_result = None
+        
         try:
-            response = await self.astep(user_msg) 
+            response = await self.astep(user_msg)
             action_reasoning = response.msg.content
             
-            # Inject agent_id into return results
-            if response.info and 'tool_calls' in response.info and response.info['tool_calls']:  
+            # Method 1: Check for tool_calls (preferred method)
+            if response.info and 'tool_calls' in response.info and response.info['tool_calls']:
                 for tool_call in response.info['tool_calls']:
                     action_name = tool_call.tool_name
                     args = tool_call.args
-                    # Add agent_id to platform return result dictionary
                     if isinstance(tool_call.result, dict):
                         tool_call.result['agent_id'] = self.social_agent_id
+                        tool_call.result['_action_name'] = action_name
+                        tool_call.result['_action_args'] = args
+                    action_result = tool_call.result
                     agent_log.info(f"Agent {self.social_agent_id} performed "
-                                f"action: {action_name} with args: {args}"
+                                f"action: {action_name} with args: {args} "
                                 f"and reasoning: {action_reasoning}")
-            else:
-                agent_log.warning(f"Agent {self.social_agent_id} did not perform any action. Reasoning: {action_reasoning}")
-
+            
+            # Method 2: Fallback to JSON parsing if no tool_calls
+            elif not action_result:
+                action_json = self._extract_action_json(action_reasoning)
+                if action_json:
+                    function_name = self._clean_function_name(action_json.get("function_name", ""))
+                    # Try cleaned name first, then original name as fallback
+                    func = self.all_possible_actions_dict.get(function_name)
+                    if not func:
+                        original_name = action_json.get("function_name", "")
+                        func = self.all_possible_actions_dict.get(original_name)
+                        if func:
+                            function_name = original_name
+                    
+                    if not func:
+                        available = list(self.all_possible_actions_dict.keys())[:5]
+                        raise ValueError(f"Unknown action: {function_name}. Available: {available}...")
+                    
+                    action_args = action_json.get("arguments", {})
+                    action_result = await func.func(**action_args)
+                    if isinstance(action_result, dict):
+                        action_result['agent_id'] = self.social_agent_id
+                        action_result['_action_name'] = function_name
+                        action_result['_action_args'] = action_args
+                    agent_log.info(f"Agent {self.social_agent_id} performed {function_name} "
+                                  f"(via JSON) with args: {action_args} "
+                                  f"and reasoning: {action_reasoning}")
+                else:
+                    raise ValueError(f"No action found in response. Reasoning: {action_reasoning}")
+            
         except Exception as e:
             agent_log.error(f"Agent {self.social_agent_id} error: {e}")
-            response = e
-
+            action_result = {"success": False, "error": str(e)}
         finally:
             if extra_action:
                 self.remove_tools(extra_action)
-                
-            return response, action_reasoning
+        
+        return action_result, action_reasoning
 
     async def perform_communication_action(self, extra_action: List[Union[FunctionTool, Callable]] = None, extra_prompt: str = None, current_round: int = 1, market_phase: str = "general"):
         """
-        Execute market simulation actions, including environment observation and extra prompts.
+        Execute communication actions, including environment observation and extra prompts.
         
         Args:
             extra_action: Additional tool list
@@ -233,8 +289,30 @@ class SocialAgent(ChatAgent):
             user_msg_content += f"\n\n## Additional Information:\n{extra_prompt}"
         user_msg_content += (
             "\n## Notice:\n"
-            "You must use the `tool_call` to invoke the tool to perform the operation."
-            "When you execute a tool_call, you also need to explain your reasoning."
+            """
+            You can execute your action in either of the following ways:
+            
+            1. **Preferred method**: Use tool_call to directly call the available tools.
+            2. **Alternative method**: If tool_call is not available, output your action as JSON:
+            
+            <THOUGHT>
+            1. Analyze the current situation and requirements.
+            2. Determine the best action to take.
+            3. Explain your reasoning for the selected action and the specific parameters you will use.
+            </THOUGHT>
+            
+            <ACTION>
+            {
+                "function_name": "name_of_the_function",
+                "arguments": {
+                    "param1": "value1",
+                    "param2": "value2"
+                }
+            }
+            </ACTION>
+            
+            **IMPORTANT**: The JSON in <ACTION> must be valid JSON format. Do NOT add any comments (// or /* */) inside the JSON. All explanations should be in the <THOUGHT> section, not in the JSON itself.
+            """
         )
 
         user_msg = BaseMessage.make_user_message(
@@ -243,37 +321,69 @@ class SocialAgent(ChatAgent):
         )
 
         if extra_action:
-            extra_tool = [self.all_possible_actions_dict[extra_action_name] for extra_action_name in extra_action]
+            extra_tool = [self.all_possible_actions_dict[extra_action_name] 
+                         for extra_action_name in extra_action 
+                         if extra_action_name in self.all_possible_actions_dict]
             self.add_tools(extra_tool)
-            
+        
         action_reasoning = ""
+        action_result = None
+        
         try:
-            response = await self.astep(user_msg) 
+            response = await self.astep(user_msg)
             action_reasoning = response.msg.content
             
-            # Inject agent_id into return results
-            if response.info and 'tool_calls' in response.info and response.info['tool_calls']:  
+            # Method 1: Check for tool_calls (preferred method)
+            if response.info and 'tool_calls' in response.info and response.info['tool_calls']:
                 for tool_call in response.info['tool_calls']:
                     action_name = tool_call.tool_name
                     args = tool_call.args
-                    # Add agent_id to platform return result dictionary
                     if isinstance(tool_call.result, dict):
                         tool_call.result['agent_id'] = self.social_agent_id
+                        tool_call.result['_action_name'] = action_name
+                        tool_call.result['_action_args'] = args
+                    action_result = tool_call.result
                     agent_log.info(f"Agent {self.social_agent_id} performed "
-                                f"action: {action_name} with args: {args}"
+                                f"action: {action_name} with args: {args} "
                                 f"and reasoning: {action_reasoning}")
-            else:
-                agent_log.warning(f"Agent {self.social_agent_id} did not perform any action. Reasoning: {action_reasoning}")
-
+            
+            # Method 2: Fallback to JSON parsing if no tool_calls
+            elif not action_result:
+                action_json = self._extract_action_json(action_reasoning)
+                if action_json:
+                    function_name = self._clean_function_name(action_json.get("function_name", ""))
+                    # Try cleaned name first, then original name as fallback
+                    func = self.all_possible_actions_dict.get(function_name)
+                    if not func:
+                        original_name = action_json.get("function_name", "")
+                        func = self.all_possible_actions_dict.get(original_name)
+                        if func:
+                            function_name = original_name
+                    
+                    if not func:
+                        available = list(self.all_possible_actions_dict.keys())[:5]
+                        raise ValueError(f"Unknown action: {function_name}. Available: {available}...")
+                    
+                    action_args = action_json.get("arguments", {})
+                    action_result = await func.func(**action_args)
+                    if isinstance(action_result, dict):
+                        action_result['agent_id'] = self.social_agent_id
+                        action_result['_action_name'] = function_name
+                        action_result['_action_args'] = action_args
+                    agent_log.info(f"Agent {self.social_agent_id} performed {function_name} "
+                                  f"(via JSON) with args: {action_args} "
+                                  f"and reasoning: {action_reasoning}")
+                else:
+                    raise ValueError(f"No action found in response. Reasoning: {action_reasoning}")
+            
         except Exception as e:
             agent_log.error(f"Agent {self.social_agent_id} error: {e}")
-            response = e
-
+            action_result = {"success": False, "error": str(e)}
         finally:
             if extra_action:
                 self.remove_tools(extra_action)
-                
-            return response, action_reasoning
+        
+        return action_result, action_reasoning
 
 
 
@@ -444,6 +554,79 @@ class SocialAgent(ChatAgent):
 
         result = await func(*args)
         return result
+
+    def _clean_function_name(self, function_name: str) -> str:
+        """Clean function name by removing meaningless prefixes."""
+        if not function_name:
+            return function_name
+        # Remove common prefixes like "function.", "func.", "tool.", "action."
+        prefixes = ["function.", "func.", "tool.", "action.", "functions.", "tools."]
+        for prefix in prefixes:
+            if function_name.startswith(prefix):
+                function_name = function_name[len(prefix):]
+        return function_name.strip()
+
+    def _extract_action_json(self, content: str) -> dict | None:
+        """Extract JSON action from LLM response, handling nested structures."""
+        # Try extracting from tags/code blocks first
+        for pattern in [r'<ACTION>(.*?)</ACTION>', r'```(?:json)?\s*\n?(.*?)```']:
+            match = re.search(pattern, content, re.DOTALL | re.IGNORECASE)
+            if match:
+                json_str = match.group(1).strip()
+                if result := self._parse_json_string(json_str):
+                    return result
+        
+        # Find function_name and extract complete JSON using balanced braces
+        func_pos = content.find('"function_name"')
+        if func_pos == -1:
+            func_pos = content.find("'function_name'")
+        if func_pos == -1:
+            agent_log.warning(f"No function_name found. Content: {content[:200]}")
+            return None
+        
+        brace_start = content.rfind('{', 0, func_pos)
+        if brace_start == -1:
+            return None
+        
+        # Extract JSON with balanced brace matching (handles nested structures)
+        brace_count = in_string = escape_next = 0
+        for i in range(brace_start, len(content)):
+            char = content[i]
+            if escape_next:
+                escape_next = False
+            elif char == '\\':
+                escape_next = True
+            elif char == '"' and not escape_next:
+                in_string = not in_string
+            elif not in_string:
+                brace_count += (char == '{') - (char == '}')
+                if brace_count == 0:
+                    if result := self._parse_json_string(content[brace_start:i+1]):
+                        return result
+                    break
+        
+        agent_log.warning(f"Failed to parse action JSON. Content: {content[:200]}")
+        return None
+    
+    def _parse_json_string(self, json_str: str) -> dict | None:
+        """Parse JSON with automatic error recovery."""
+        if not (json_str := json_str.strip()):
+            return None
+        
+        # Try direct parse, then with fixes
+        for s in [json_str, json_str.replace("'", '"')]:
+            try:
+                # Fix Python bools/None
+                fixed = re.sub(r'\bTrue\b', 'true', re.sub(r'\bFalse\b', 'false', re.sub(r'\bNone\b', 'null', s)))
+                data = json.loads(fixed)
+                if isinstance(data, dict) and "function_name" in data:
+                    return {
+                        "function_name": self._clean_function_name(data["function_name"]),
+                        "arguments": data.get("arguments", {})
+                    }
+            except (json.JSONDecodeError, KeyError):
+                continue
+        return None
 
     async def perform_action_by_data(self, func_name, *args, **kwargs) -> Any:
         func_name = func_name.value if isinstance(func_name,

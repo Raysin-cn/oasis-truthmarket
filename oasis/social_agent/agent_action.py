@@ -763,16 +763,32 @@ class SocialAction:
                                          ActionType.LISTEN_FROM_GROUP.value)
 
     async def list_product(self, advertised_quality: str, product_quality: str, has_warrant: bool = False):
-        """
-        Lists a product for sale in the market for the current round.
+        r"""List a product for sale in the market for the current round.
+
+        This method invokes an asynchronous action to list a product for sale
+        in the market. The product can have different advertised and actual
+        qualities, and optionally include a truth warrant. Upon successful
+        execution, it returns a dictionary indicating success and the ID of the
+        newly created product listing.
 
         Args:
-            advertised_quality (str): The quality of the product advertised to 
-                                    buyers. Must be 'HQ' or 'LQ'.
-            product_quality (str): The true quality of the product being 
-                                    produced. Must be 'HQ' or 'LQ'.
-            has_warrant (bool): Whether to offer a truth warrant for the 
-                                    product.
+            advertised_quality (str): The quality of the product advertised to
+                buyers. Must be 'HQ' (High Quality) or 'LQ' (Low Quality).
+            product_quality (str): The true quality of the product being
+                produced. Must be 'HQ' (High Quality) or 'LQ' (Low Quality).
+            has_warrant (bool): Whether to offer a truth warrant for the
+                product. Defaults to False. A truth warrant allows buyers to
+                challenge the product if the advertised quality does not match
+                the actual quality.
+
+        Returns:
+            dict: A dictionary with two key-value pairs. The 'success' key
+                maps to a boolean indicating whether the product listing was
+                successful. The 'product_id' key maps to the integer ID of the
+                newly created product listing.
+
+            Example of a successful return:
+            {"success": True, "product_id": 123}
         """
         product_details = {
             "advertised_quality": advertised_quality,
@@ -783,44 +799,137 @@ class SocialAction:
                                         ActionType.LIST_PRODUCT.value)
 
     async def exit_market(self):
-        """
-        Exits the market. 
+        r"""Exit the market for the current round.
+
+        This method invokes an asynchronous action to exit the market. When
+        an agent exits the market, they will not be able to list products or
+        participate in market activities until they re-enter. Upon successful
+        execution, it returns a dictionary indicating the success of the
+        operation.
+
+        Returns:
+            dict: A dictionary with a 'success' key indicating whether the
+                exit operation was successful.
+
+            Example of a successful return:
+            {"success": True}
         """
         return await self.perform_action(None, ActionType.EXIT_MARKET.value)
 
     async def reenter_market(self):
-        """
-        Re-enters the market in the next round after having exited in a previous round. This action is typically used to reset a negative reputation score back to zero.
+        r"""Re-enter the market in the next round after having exited.
+
+        This method invokes an asynchronous action to re-enter the market after
+        having exited in a previous round. This action is typically used to
+        reset a negative reputation score back to zero, allowing the agent to
+        start fresh in the market. Upon successful execution, it returns a
+        dictionary indicating the success of the operation.
+
+        Returns:
+            dict: A dictionary with a 'success' key indicating whether
+                the re-entry operation was successful.
+
+            Example of a successful return:
+            {"success": True}
+
+        Note:
+            This action can only be performed if the agent has previously
+            exited the market. Attempting to re-enter without having exited
+            will result in a failure.
         """
         return await self.perform_action(None, ActionType.REENTER_MARKET.value)
 
     async def purchase_product_id(self, product_id: int):
-        """
-        Purchases a product based on its unique product ID.
+        r"""Purchase a product based on its unique product ID.
+
+        This method invokes an asynchronous action to purchase a product
+        identified by its unique product ID. Upon successful execution, it
+        returns a dictionary indicating success and the ID of the newly created
+        transaction.
 
         Args:
-            product_id (int): The unique identifier for the product listing to be purchased.
+            product_id (int): The unique identifier for the product listing to
+                be purchased.
+
+        Returns:
+            dict: A dictionary with two key-value pairs. The 'success' key
+                maps to a boolean indicating whether the purchase was
+                successful. The 'transaction_id' key maps to the integer ID of
+                the newly created transaction.
+
+            Example of a successful return:
+            {"success": True, "transaction_id": 456}
+
+        Note:
+            The product must be available for purchase and the agent must have
+            sufficient budget. Attempting to purchase a product that is no
+            longer available or with insufficient funds will result in a
+            failure.
         """
         return await self.perform_action(product_id, ActionType.PURCHASE_PRODUCT_ID.value)
 
     async def challenge_warrant(self, transaction_id: int, rating: int):
-        """
-        Challenges the warrant of a previously purchased product. This should be done if you suspect the advertised quality does not match the true quality.
+        r"""Challenge the warrant of a previously purchased product.
+
+        This method invokes an asynchronous action to challenge the warrant of
+        a previously purchased product. This should be done if you suspect the
+        advertised quality does not match the true quality. Upon successful
+        execution, it returns a dictionary indicating success and the ID of the
+        challenge record.
 
         Args:
-            transaction_id (int): The unique identifier of the transaction whose warrant is being challenged.
-            rating (int): The rating to give. Use an integer in the range [-2, -1, 0, 1, 2], where -2 means very bad, -1 means bad, 0 means neutral, 1 means good, and 2 means very good.
+            transaction_id (int): The unique identifier of the transaction
+                whose warrant is being challenged.
+            rating (int): The rating to give. Use an integer in the range
+                [-2, -1, 0, 1, 2], where -2 means very bad, -1 means bad, 0
+                means neutral, 1 means good, and 2 means very good.
+
+        Returns:
+            dict: A dictionary with two key-value pairs. The 'success' key
+                maps to a boolean indicating whether the challenge was
+                successful. The 'challenge_id' key maps to the integer ID of
+                the newly created challenge record.
+
+            Example of a successful return:
+            {"success": True, "challenge_id": 789}
+
+        Note:
+            This action can only be performed on transactions that included a
+            truth warrant. Attempting to challenge a transaction without a
+            warrant will result in a failure.
         """
         rating_details = {"transaction_id": transaction_id, "rating": rating}
         return await self.perform_action(rating_details, ActionType.CHALLENGE_WARRANT.value)
 
     async def rate_transaction(self, transaction_id: int, rating: int):
-        """
-        Rates a completed transaction to influence the seller's reputation.
+        r"""Rate a completed transaction to influence the seller's reputation.
+
+        This method invokes an asynchronous action to rate a completed
+        transaction. The rating will influence the seller's reputation score
+        in the market. Upon successful execution, it returns a dictionary
+        indicating success and the ID of the newly created rating record.
 
         Args:
-            transaction_id (int): The unique identifier of the transaction to be rated.
-            rating (int): The rating to give. Use an integer in the range [-2, -1, 0, 1, 2], where -2 means very bad, -1 means bad, 0 means neutral, 1 means good, and 2 means very good.
+            transaction_id (int): The unique identifier of the transaction to
+                be rated.
+            rating (int): The rating to give. Use an integer in the range
+                [-2, -1, 0, 1, 2], where -2 means very bad, -1 means bad, 0
+                means neutral, 1 means good, and 2 means very good.
+
+        Returns:
+            dict: A dictionary with two key-value pairs. The 'success' key
+                maps to a boolean indicating whether the rating was
+                successful. The 'rating_id' key maps to the integer ID of the
+                newly created rating record.
+
+            Example of a successful return:
+            {"success": True, "rating_id": 321}
+
+        Note:
+            This action can only be performed on transactions that the agent
+            has completed. Attempting to rate a transaction that does not
+            belong to the agent or has not been completed will result in a
+            failure.
         """
         rating_details = {"transaction_id": transaction_id, "rating": rating}
         return await self.perform_action(rating_details, ActionType.RATE_TRANSACTION.value)

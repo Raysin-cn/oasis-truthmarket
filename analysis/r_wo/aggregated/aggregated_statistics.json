@@ -1,0 +1,98 @@
+{
+  "experiment_id": "r_wo",
+  "total_runs": 10,
+  "summary_stats": {
+    "avg_transactions_per_run": 61.8,
+    "std_transactions_per_run": 3.9698866482558413,
+    "avg_seller_profit_per_run": 192.5,
+    "std_seller_profit_per_run": 9.362157870918436,
+    "avg_buyer_utility_per_run": 161.7,
+    "std_buyer_utility_per_run": 24.61320783644424,
+    "total_transactions_all_runs": 618,
+    "total_seller_profit_all_runs": 1925.0,
+    "total_buyer_utility_all_runs": 1617.0
+  },
+  "round_stats": {
+    "1": {
+      "avg_transactions": 7.9,
+      "std_transactions": 1.0440306508910548,
+      "avg_seller_profit": 24.1,
+      "std_seller_profit": 3.3,
+      "avg_buyer_utility": 22.5,
+      "std_buyer_utility": 3.0740852297878796
+    },
+    "2": {
+      "avg_transactions": 7.9,
+      "std_transactions": 1.0440306508910548,
+      "avg_seller_profit": 23.8,
+      "std_seller_profit": 3.370459909270543,
+      "avg_buyer_utility": 22.6,
+      "std_buyer_utility": 3.8781438859330635
+    },
+    "3": {
+      "avg_transactions": 9.5,
+      "std_transactions": 0.5,
+      "avg_seller_profit": 29.6,
+      "std_seller_profit": 1.562049935181331,
+      "avg_buyer_utility": 25.2,
+      "std_buyer_utility": 3.8418745424597094
+    },
+    "4": {
+      "avg_transactions": 9.7,
+      "std_transactions": 0.45825756949558394,
+      "avg_seller_profit": 30.8,
+      "std_seller_profit": 1.3266499161421599,
+      "avg_buyer_utility": 23.2,
+      "std_buyer_utility": 5.1536394906900505
+    },
+    "5": {
+      "avg_transactions": 8.1,
+      "std_transactions": 1.0440306508910548,
+      "avg_seller_profit": 25.6,
+      "std_seller_profit": 3.352610922848042,
+      "avg_buyer_utility": 20.0,
+      "std_buyer_utility": 4.8373546489791295
+    },
+    "6": {
+      "avg_transactions": 9.4,
+      "std_transactions": 0.4898979485566356,
+      "avg_seller_profit": 29.6,
+      "std_seller_profit": 1.6852299546352718,
+      "avg_buyer_utility": 24.0,
+      "std_buyer_utility": 4.449719092257398
+    },
+    "7": {
+      "avg_transactions": 9.3,
+      "std_transactions": 0.6403124237432849,
+      "avg_seller_profit": 29.0,
+      "std_seller_profit": 2.4899799195977463,
+      "avg_buyer_utility": 24.2,
+      "std_buyer_utility": 3.682390527904394
+    }
+  },
+  "cross_run_variance": {},
+  "seller_profit_by_run": {
+    "8": 189.0,
+    "3": 199.0,
+    "4": 189.0,
+    "1": 178.0,
+    "9": 203.0,
+    "5": 199.0,
+    "10": 203.0,
+    "7": 175.0,
+    "6": 198.0,
+    "2": 192.0
+  },
+  "buyer_utility_by_run": {
+    "8": 129.0,
+    "3": 171.0,
+    "4": 153.0,
+    "1": 118.0,
+    "9": 183.0,
+    "5": 183.0,
+    "10": 195.0,
+    "7": 147.0,
+    "6": 186.0,
+    "2": 152.0
+  }
+}

@@ -12,6 +12,7 @@
 # limitations under the License.
 # =========== Copyright 2023 @ CAMEL-AI.org. All Rights Reserved. ===========
 import asyncio
+import json
 import logging
 import os
 from datetime import datetime
@@ -149,9 +150,8 @@ class OasisEnv:
                                                           LLMAction]]]]
     ) -> List[Dict[str, Any]]: 
         r"""Update the recommendation system and perform the actions."""
-        await self.platform.update_rec_table()
-        env_log.info("update rec table.")
-
+        # await self.platform.update_rec_table()
+        # env_log.info("update rec table.")
         tasks = []
         for agent, action in actions.items():
             if isinstance(action, list):
@@ -176,20 +176,57 @@ class OasisEnv:
 
         # Execute all tasks and extract, return result list
         responses = await asyncio.gather(*tasks)
-        results_reasoning = [response[1] for response in responses]
-        responses= [response[0] for response in responses]
+        results_reasoning = [r[1] for r in responses]
+        responses = [r[0] for r in responses]
         results = []
-        for response in responses:
+        detailed_results = []
+        
+        for idx, response in enumerate(responses):
+            reasoning = results_reasoning[idx] if idx < len(results_reasoning) else ""
+            agent_id = None
+            action_name = None
+            action_args = None
+            
             if response and hasattr(response, 'info') and response.info and 'tool_calls' in response.info and response.info['tool_calls']:
-                # Extract result of each successful call
                 for tool_call in response.info['tool_calls']:
                     if tool_call.result:
                         results.append(tool_call.result)
+                        if isinstance(tool_call.result, dict):
+                            agent_id = tool_call.result.get('agent_id')
+                            action_name = tool_call.result.get('_action_name') or getattr(tool_call, 'tool_name', None)
+                            action_args = tool_call.result.get('_action_args') or getattr(tool_call, 'args', None)
+                        else:
+                            action_name = getattr(tool_call, 'tool_name', None)
+                            action_args = getattr(tool_call, 'args', None)
+                        detailed_results.append({
+                            'agent_id': agent_id,
+                            'action_name': action_name,
+                            'action_args': action_args,
+                            'action_result': tool_call.result,
+                            'reasoning': reasoning
+                        })
+            else:
+                results.append(response)
+                if isinstance(response, dict):
+                    agent_id = response.get('agent_id')
+                    action_name = response.get('_action_name')
+                    action_args = response.get('_action_args')
+                
+                detailed_results.append({
+                    'agent_id': agent_id,
+                    'action_name': action_name,
+                    'action_args': action_args,
+                    'action_result': response,
+                    'reasoning': reasoning
+                })
 
         env_log.info("performed all actions.")
         
-        if self.platform_type == DefaultPlatformType.REDDIT:
-            self.platform.sandbox_clock.time_step += 1
+        # if self.platform_type == DefaultPlatformType.REDDIT:
+        #     self.platform.sandbox_clock.time_step += 1
+        
+        # Store detailed results for later retrieval
+        self._last_step_detailed_results = detailed_results
             
         return results
 

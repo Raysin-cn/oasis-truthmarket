@@ -1,0 +1,126 @@
+{
+  "experiment_id": "rw_wsc",
+  "total_runs": 10,
+  "successful_runs": 10,
+  "failed_runs": 0,
+  "run_details": {
+    "run_1": {
+      "run_id": 1,
+      "db_path": "experiments/rw_wsc/run_1.db",
+      "total_transactions": 68,
+      "total_seller_profit": 204.0,
+      "total_buyer_utility": 200.0,
+      "active_sellers": 10,
+      "avg_seller_profit": 3.0,
+      "max_seller_profit": 4.0,
+      "min_seller_profit": 2.0,
+      "active_buyers": 10,
+      "avg_buyer_utility": 2.9411764705882355,
+      "max_buyer_utility": 3.0,
+      "min_buyer_utility": 0.0
+    },
+    "run_2": {
+      "run_id": 2,
+      "db_path": "experiments/rw_wsc/run_2.db",
+      "total_transactions": 68,
+      "total_seller_profit": 204.0,
+      "total_buyer_utility": 204.0,
+      "active_sellers": 10,
+      "avg_seller_profit": 3.0,
+      "max_seller_profit": 3.0,
+      "min_seller_profit": 3.0,
+      "active_buyers": 10,
+      "avg_buyer_utility": 3.0,
+      "max_buyer_utility": 3.0,
+      "min_buyer_utility": 3.0
+    },
+    "run_3": {
+      "run_id": 3,
+      "db_path": "experiments/rw_wsc/run_3.db",
+      "total_transactions": 69,
+      "total_seller_profit": 207.0,
+      "total_buyer_utility": 207.0,
+      "active_sellers": 10,
+      "avg_seller_profit": 3.0,
+      "max_seller_profit": 3.0,
+      "min_seller_profit": 3.0,
+      "active_buyers": 10,
+      "avg_buyer_utility": 3.0,
+      "max_buyer_utility": 3.0,
+      "min_buyer_utility": 3.0
+    },
+    "run_4": {
+      "run_id": 4,
+      "db_path": "experiments/rw_wsc/run_4.db",
+      "total_transactions": 63,
+      "total_seller_profit": 189.0,
+      "total_buyer_utility": 189.0,
+      "active_sellers": 9,
+      "avg_seller_profit": 3.0,
+      "max_seller_profit": 3.0,
+      "min_seller_profit": 3.0,
+      "active_buyers": 9,
+      "avg_buyer_utility": 3.0,
+      "max_buyer_utility": 3.0,
+      "min_buyer_utility": 3.0
+    },
+    "run_5": {
+      "run_id": 5,
+      "db_path": "experiments/rw_wsc/run_5.db",
+      "total_transactions": 67,
+      "total_seller_profit": 201.0,
+      "total_buyer_utility": 197.0,
+      "active_sellers": 10,
+      "avg_seller_profit": 3.0,
+      "max_seller_profit": 4.0,
+      "min_seller_profit": 2.0,
+      "active_buyers": 10,
+      "avg_buyer_utility": 2.9402985074626864,
+      "max_buyer_utility": 3.0,
+      "min_buyer_utility": 0.0
+    },
+    "run_6": {
+      "run_id": 6,
+      "db_path": "experiments/rw_wsc/run_6.db",
+      "total_transactions": 54,
+      "total_seller_profit": 161.0,
+      "total_buyer_utility": 161.0,
+      "active_sellers": 10,
+      "avg_seller_profit": 2.9814814814814814,
+      "max_seller_profit": 4.0,
+      "min_seller_profit": 1.0,
+      "active_buyers": 10,
+      "avg_buyer_utility": 2.9814814814814814,
+      "max_buyer_utility": 5.0,
+      "min_buyer_utility": 0.0
+    },
+    "run_7": {
+      "run_id": 7,
+      "db_path": "experiments/rw_wsc/run_7.db",
+      "total_transactions": 0,
+      "total_seller_profit": 0,
+      "total_buyer_utility": 0
+    },
+    "run_8": {
+      "run_id": 8,
+      "db_path": "experiments/rw_wsc/run_8.db",
+      "total_transactions": 0,
+      "total_seller_profit": 0,
+      "total_buyer_utility": 0
+    },
+    "run_9": {
+      "run_id": 9,
+      "db_path": "experiments/rw_wsc/run_9.db",
+      "total_transactions": 0,
+      "total_seller_profit": 0,
+      "total_buyer_utility": 0
+    },
+    "run_10": {
+      "run_id": 10,
+      "db_path": "experiments/rw_wsc/run_10.db",
+      "total_transactions": 0,
+      "total_seller_profit": 0,
+      "total_buyer_utility": 0
+    }
+  }
+}
