@@ -2,97 +2,97 @@
   "experiment_id": "r_wbc",
   "total_runs": 10,
   "summary_stats": {
-    "avg_transactions_per_run": 68.2,
-    "std_transactions_per_run": 1.32664991614216,
-    "avg_seller_profit_per_run": 180.4,
-    "std_seller_profit_per_run": 22.584065178793654,
-    "avg_buyer_utility_per_run": 185.2,
-    "std_buyer_utility_per_run": 30.77596464775718,
-    "total_transactions_all_runs": 682,
-    "total_seller_profit_all_runs": 1804.0,
-    "total_buyer_utility_all_runs": 1852.0
+    "avg_transactions_per_run": 53.1,
+    "std_transactions_per_run": 4.414748010928823,
+    "avg_seller_profit_per_run": 167.9,
+    "std_seller_profit_per_run": 14.570175016107392,
+    "avg_buyer_utility_per_run": 127.9,
+    "std_buyer_utility_per_run": 15.807909412695912,
+    "total_transactions_all_runs": 531,
+    "total_seller_profit_all_runs": 1679.0,
+    "total_buyer_utility_all_runs": 1279.0
   },
   "round_stats": {
     "1": {
-      "avg_transactions": 10.0,
-      "std_transactions": 0.0,
-      "avg_seller_profit": 30.3,
-      "std_seller_profit": 0.6403124237432849,
-      "avg_buyer_utility": 29.1,
-      "std_buyer_utility": 1.9209372712298547
+      "avg_transactions": 5.3,
+      "std_transactions": 0.9,
+      "avg_seller_profit": 16.2,
+      "std_seller_profit": 2.85657137141714,
+      "avg_buyer_utility": 15.0,
+      "std_buyer_utility": 2.6832815729997477
     },
     "2": {
-      "avg_transactions": 10.0,
-      "std_transactions": 0.0,
-      "avg_seller_profit": 25.2,
-      "std_seller_profit": 7.9473265945222105,
-      "avg_buyer_utility": 24.4,
-      "std_buyer_utility": 10.219589032832975
+      "avg_transactions": 5.2,
+      "std_transactions": 0.9797958971132713,
+      "avg_seller_profit": 15.9,
+      "std_seller_profit": 3.1128764832546763,
+      "avg_buyer_utility": 14.3,
+      "std_buyer_utility": 3.0347981810987035
     },
     "3": {
-      "avg_transactions": 10.0,
-      "std_transactions": 0.0,
-      "avg_seller_profit": 28.5,
-      "std_seller_profit": 2.0615528128088303,
-      "avg_buyer_utility": 26.5,
-      "std_buyer_utility": 5.852349955359813
+      "avg_transactions": 9.3,
+      "std_transactions": 0.45825756949558394,
+      "avg_seller_profit": 28.8,
+      "std_seller_profit": 2.1354156504062622,
+      "avg_buyer_utility": 23.2,
+      "std_buyer_utility": 2.638181191654584
     },
     "4": {
-      "avg_transactions": 10.0,
-      "std_transactions": 0.0,
-      "avg_seller_profit": 26.1,
-      "std_seller_profit": 5.61159513863928,
-      "avg_buyer_utility": 27.3,
-      "std_buyer_utility": 7.443789357578571
+      "avg_transactions": 9.3,
+      "std_transactions": 0.6403124237432849,
+      "avg_seller_profit": 30.7,
+      "std_seller_profit": 2.4919871588754225,
+      "avg_buyer_utility": 18.7,
+      "std_buyer_utility": 3.318132004607412
     },
     "5": {
-      "avg_transactions": 8.4,
-      "std_transactions": 1.1135528725660042,
-      "avg_seller_profit": 20.6,
-      "std_seller_profit": 3.8000000000000003,
-      "avg_buyer_utility": 22.2,
-      "std_buyer_utility": 4.422668877499196
+      "avg_transactions": 6.1,
+      "std_transactions": 1.57797338380595,
+      "avg_seller_profit": 18.4,
+      "std_seller_profit": 5.083306010855534,
+      "avg_buyer_utility": 16.8,
+      "std_buyer_utility": 4.354308211415448
     },
     "6": {
-      "avg_transactions": 10.0,
-      "std_transactions": 0.0,
-      "avg_seller_profit": 23.5,
-      "std_seller_profit": 8.381527307120106,
-      "avg_buyer_utility": 29.5,
-      "std_buyer_utility": 11.5
+      "avg_transactions": 9.4,
+      "std_transactions": 0.4898979485566356,
+      "avg_seller_profit": 30.4,
+      "std_seller_profit": 1.854723699099141,
+      "avg_buyer_utility": 21.2,
+      "std_buyer_utility": 2.6381811916545836
     },
     "7": {
-      "avg_transactions": 9.8,
-      "std_transactions": 0.6,
-      "avg_seller_profit": 26.2,
-      "std_seller_profit": 7.756287771866127,
-      "avg_buyer_utility": 26.2,
-      "std_buyer_utility": 11.214276615100951
+      "avg_transactions": 8.5,
+      "std_transactions": 0.9219544457292888,
+      "avg_seller_profit": 27.5,
+      "std_seller_profit": 3.9812058474788765,
+      "avg_buyer_utility": 18.7,
+      "std_buyer_utility": 3.9
     }
   },
   "cross_run_variance": {},
   "seller_profit_by_run": {
-    "8": 210.0,
-    "3": 189.0,
-    "4": 203.0,
-    "1": 139.0,
-    "9": 154.0,
-    "5": 175.0,
-    "10": 154.0,
-    "7": 194.0,
-    "6": 193.0,
-    "2": 193.0
+    "8": 173.0,
+    "3": 148.0,
+    "4": 181.0,
+    "1": 163.0,
+    "9": 166.0,
+    "5": 173.0,
+    "10": 143.0,
+    "7": 193.0,
+    "6": 180.0,
+    "2": 159.0
   },
   "buyer_utility_by_run": {
-    "8": 170.0,
-    "3": 185.0,
-    "4": 179.0,
-    "1": 219.0,
-    "9": 254.0,
-    "5": 155.0,
-    "10": 150.0,
-    "7": 194.0,
-    "6": 153.0,
-    "2": 193.0
+    "8": 117.0,
+    "3": 120.0,
+    "4": 129.0,
+    "1": 119.0,
+    "9": 134.0,
+    "5": 141.0,
+    "10": 103.0,
+    "7": 161.0,
+    "6": 140.0,
+    "2": 115.0
   }
 }

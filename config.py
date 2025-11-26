@@ -34,7 +34,7 @@ class SimulationConfig:
     REENTRY_ALLOWED_ROUND = 5  # Re-entry market allowed rounds
     INITIAL_WINDOW_ROUNDS = [1, 2]  # Initial rounds with hidden complete history
     EXIT_ROUND = 7  # Exit market allowed rounds
-    MARKET_TYPE = 'reputation_and_warrant'
+    MARKET_TYPE = 'reputation_only'
     COMMUNICATION_TYPE = 'none'  # Communication type: 'none', 'seller', 'buyer', 'both'
     
     # Model configuration

@@ -8,6 +8,8 @@ import sqlite3
 import os
 import oasis
 import random
+import json
+from datetime import datetime
 from camel.models import ModelFactory
 from camel.types import ModelPlatformType, ModelType
 from oasis import SocialAgent, AgentGraph, UserInfo, make
@@ -22,6 +24,56 @@ from config import SimulationConfig
 
 from dotenv import load_dotenv
 load_dotenv(override=True)
+
+
+def get_action_log_path(database_path: str) -> str:
+    """Generate action log JSON file path from database path"""
+    return database_path.replace('.db', '_actions.json')
+
+
+def cleanup_action_log(database_path: str):
+    """Clean up action log JSON file if it exists"""
+    log_path = get_action_log_path(database_path)
+    if os.path.exists(log_path):
+        os.remove(log_path)
+        print(f"Action log cleaned up: {log_path}")
+
+
+def save_action_records(env, round_num: int, phase: str, database_path: str):
+    """Save env.step() detailed results to JSON file"""
+    if not hasattr(env, '_last_step_detailed_results') or not env._last_step_detailed_results:
+        return
+    
+    log_path = get_action_log_path(database_path)
+    log_dir = os.path.dirname(log_path)
+    if log_dir:
+        os.makedirs(log_dir, exist_ok=True)
+    
+    all_records = []
+    if os.path.exists(log_path):
+        try:
+            with open(log_path, 'r', encoding='utf-8') as f:
+                all_records = json.load(f)
+        except (json.JSONDecodeError, IOError):
+            pass
+    
+    for result in env._last_step_detailed_results:
+        all_records.append({
+            'round': round_num,
+            'phase': phase,
+            'timestamp': datetime.now().isoformat(),
+            'agent_id': result.get('agent_id'),
+            'action_name': result.get('action_name'),
+            'action_args': result.get('action_args'),
+            'action_result': result.get('action_result'),
+            'reasoning': result.get('reasoning', '')
+        })
+    
+    try:
+        with open(log_path, 'w', encoding='utf-8') as f:
+            json.dump(all_records, f, indent=2, ensure_ascii=False, default=str)
+    except IOError as e:
+        print(f"Warning: Failed to save action records to {log_path}: {e}")
 
 
 def reset_agent_id_counter():
@@ -219,9 +271,10 @@ async def run_single_simulation(database_path: str, market_type: str = None):
         market_type = SimulationConfig.MARKET_TYPE
 
 
-    # Clean up existing database
+    # Clean up existing database and action log
     if os.path.exists(database_path):
         os.remove(database_path)
+    cleanup_action_log(database_path)
 
     model = ModelFactory.create(
         model_platform=SimulationConfig.MODEL_PLATFORM,
@@ -332,6 +385,7 @@ async def run_single_simulation(database_path: str, market_type: str = None):
         
         if seller_actions:
             await env.step(seller_actions)
+            save_action_records(env, round_num, 'seller_listing', database_path)
         print("All seller actions are complete.")
 
         # Buyer communication
@@ -367,6 +421,7 @@ async def run_single_simulation(database_path: str, market_type: str = None):
                 )
         if buyer_communication_actions:
             await env.step(buyer_communication_actions)
+            save_action_records(env, round_num, 'buyer_communication', database_path)
         print("All buyer communication actions are complete.")
 
         print(f"\n--- [Round {round_num}] Buyer Action Phase 1: Purchase ---")
@@ -401,6 +456,7 @@ async def run_single_simulation(database_path: str, market_type: str = None):
                 level="market"
             )
             results = await env.step(buyer_actions)
+            save_action_records(env, round_num, 'buyer_purchase', database_path)
             # env.step returns a list, so extend instead of append
             if isinstance(results, list):
                 purchase_results.extend(results)
@@ -456,6 +512,7 @@ async def run_single_simulation(database_path: str, market_type: str = None):
         
         if post_purchase_actions:
             await env.step(post_purchase_actions)
+            save_action_records(env, round_num, 'buyer_rating', database_path)
         print("All post-purchase actions are complete.")
 
         # clear_market(database_path)
@@ -525,6 +582,6 @@ async def run_single_simulation(database_path: str, market_type: str = None):
 if __name__ == "__main__":
     # Allow direct running of single simulation for testing
     import sys
-    db_path = sys.argv[1] if len(sys.argv) > 1 else "test_single_run.db"
+    db_path = sys.argv[1] if len(sys.argv) > 1 else "test_single_run_buyer_communication.db"
     market_type = sys.argv[2] if len(sys.argv) > 2 else None
     asyncio.run(run_single_simulation(db_path, market_type=market_type))

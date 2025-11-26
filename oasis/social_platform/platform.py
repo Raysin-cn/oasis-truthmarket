@@ -1676,8 +1676,8 @@ class Platform:
             
             self.pl_utils._execute_db_command("SELECT budget FROM user WHERE agent_id = ?", (buyer_id,))
             current_budget = self.db_cursor.fetchone()[0]
-            # if current_budget < price:
-            #     raise ValueError(f"Not enough budget to purchase this product. Current budget: {current_budget}, Price: {price}")
+            if current_budget < price:
+                raise ValueError(f"Not enough budget to purchase this product. Current budget: {current_budget}, Price: {price}")
             
             
             # Calculate seller profit: selling price - production cost - warranty cost
@@ -1757,8 +1757,8 @@ class Platform:
 
             self.pl_utils._execute_db_command("SELECT budget FROM user WHERE agent_id = ?", (seller_id,))
             current_budget = self.db_cursor.fetchone()[0]
-            # if current_budget < cost:
-            #     raise ValueError(f"Not enough budget to list product. Current budget: {current_budget}, Cost: {cost}")
+            if current_budget < cost:
+                raise ValueError(f"Not enough budget to list product. Current budget: {current_budget}, Cost: {cost}")
 
             self.pl_utils._execute_db_command("UPDATE user SET budget = budget - ? WHERE agent_id = ?", (cost, seller_id), commit=True)
 
