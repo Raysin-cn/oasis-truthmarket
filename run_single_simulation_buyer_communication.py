@@ -252,7 +252,7 @@ def initialize_market_roles(agent_graph: AgentGraph, database_path: str = None):
         conn.close()
 
 
-async def run_single_simulation(database_path: str, market_type: str = None):
+async def run_single_simulation(database_path: str, market_type: str = None, conditions: str = None):
     """Run single market simulation
     
     Args:
@@ -317,6 +317,8 @@ async def run_single_simulation(database_path: str, market_type: str = None):
     # Add buyer agents (reassign agent_id)
     for agent_id, agent in buyer_agent_graph.get_agents():
         agent.env.is_market_sim = True
+        if conditions != None:
+            agent.env.conditions = conditions
         agent_graph.add_agent(agent)
 
     env = make(
@@ -411,6 +413,10 @@ async def run_single_simulation(database_path: str, market_type: str = None):
                     "\n\nIn this phase, you are allowed to perform some social platform actions to communicate with other buyers. "
                     "You cannot perform any other actions during this phase.\n"
                     "You can share your purchase experience, product information, seller reputation, or any other information with other buyers to help them make a purchase decision. "
+                    "\n\nWhen you call `create_post(content, useful_info)`, the `useful_info` argument MUST be a JSON string that captures your private ground-truth log in this exact format: "
+                    "{\"seller\": \"<seller_id>\", \"outcome\": \"<FRAUD or HONEST>\"}. "
+                    "Set `outcome` to `\"FRAUD\"` when a seller advertised high quality but delivered low quality; set `outcome` to `\"HONEST\"` when a seller advertised high quality and delivered high quality. "
+                    "If you are not sharing a specific transaction experience, pass an empty string for `useful_info`."
                 )
                 # Tools available for buyers in communication phase: only allow social platform actions
                 communication_tools = ['create_post', 'quote_post', 'like_post', 'dislike_post']
@@ -420,7 +426,7 @@ async def run_single_simulation(database_path: str, market_type: str = None):
                     level = "communication"
                 )
         if buyer_communication_actions:
-            await env.step(buyer_communication_actions)
+            results = await env.step(buyer_communication_actions)
             save_action_records(env, round_num, 'buyer_communication', database_path)
         print("All buyer communication actions are complete.")
 
@@ -584,4 +590,5 @@ if __name__ == "__main__":
     import sys
     db_path = sys.argv[1] if len(sys.argv) > 1 else "test_single_run_buyer_communication.db"
     market_type = sys.argv[2] if len(sys.argv) > 2 else None
-    asyncio.run(run_single_simulation(db_path, market_type=market_type))
+    conditions = sys.argv[3] if len(sys.argv) > 3 else None
+    asyncio.run(run_single_simulation(db_path, market_type=market_type, conditions=conditions))

@@ -403,7 +403,8 @@ class Platform:
             commit=True,
         )
 
-    async def create_post(self, agent_id: int, content: str):
+    async def create_post(self, agent_id: int, post_info: tuple):
+        content, useful_info = post_info
         if self.recsys_type == RecsysType.REDDIT:
             current_time = self.sandbox_clock.time_transfer(
                 datetime.now(), self.start_time)
@@ -413,14 +414,14 @@ class Platform:
             user_id = agent_id
 
             post_insert_query = (
-                "INSERT INTO post (user_id, content, created_at, num_likes, "
-                "num_dislikes, num_shares) VALUES (?, ?, ?, ?, ?, ?)")
+                "INSERT INTO post (user_id, content, useful_info, created_at, num_likes, "
+                "num_dislikes, num_shares, num_reports) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
             self.pl_utils._execute_db_command(
-                post_insert_query, (user_id, content, current_time, 0, 0, 0),
+                post_insert_query, (user_id, content, useful_info, current_time, 0, 0, 0, 0),
                 commit=True)
             post_id = self.db_cursor.lastrowid
 
-            action_info = {"content": content, "post_id": post_id}
+            action_info = {"content": content, "useful_info": useful_info, "post_id": post_id}
             self.pl_utils._record_trace(user_id, ActionType.CREATE_POST.value,
                                         action_info, current_time)
 
@@ -428,7 +429,7 @@ class Platform:
             #                  f"current_time={current_time}, "
             #                  f"action={ActionType.CREATE_POST.value}, "
             #                  f"info={action_info}")
-            return {"success": True, "post_id": post_id}
+            return {"success": True, "post_id": post_id, "useful_info": useful_info}
 
         except Exception as e:
             return {"success": False, "error": str(e)}
@@ -1388,7 +1389,7 @@ class Platform:
                     "response": response, 
                     "interview_id": interview_id
                 }
-
+            
             # Record the interview in the trace table
             self.pl_utils._record_trace(user_id, ActionType.INTERVIEW.value,
                                         action_info, current_time)

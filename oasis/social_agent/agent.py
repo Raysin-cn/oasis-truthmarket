@@ -127,6 +127,7 @@ class SocialAgent(ChatAgent):
             "a lot of time and effort for nothing.\n"
             "\n"
             "What do you think Helen should do?")
+        self.communication_memory = []
 
     async def perform_market_action(self, extra_action: List[Union[FunctionTool, Callable]] = None, extra_prompt: str = None, current_round: int = 1, market_phase: str = "general"):
         """
@@ -282,6 +283,34 @@ class SocialAgent(ChatAgent):
         agent_log.info(
             f"Agent {self.social_agent_id} ({role}) observing environment in {market_phase} phase: "
             f"{env_prompt}")
+        
+        # In communication phase, parse posts' useful_info and add FRAUD records to communication_memory
+        if market_phase == "communication":
+            posts_data = self.env.get_posts_communication_data()
+            for post in posts_data:
+                useful_info = post.get('useful_info', '')
+                if useful_info:
+                    try:
+                        # Parse useful_info as JSON
+                        info_dict = json.loads(useful_info)
+                        outcome = info_dict.get('outcome', '')
+                        # If outcome is "FRAUD", add to communication_memory for data analysis
+                        if outcome == "FRAUD":
+                            self.communication_memory.append({
+                                "seller": info_dict.get('seller', ''),
+                                "outcome": outcome,
+                                "post_id": post.get('post_id'),
+                                "user_id": post.get('user_id'),
+                                "content": post.get('content', '')
+                            })
+                            agent_log.info(
+                                f"Agent {self.social_agent_id} recorded FRAUD from post {post.get('post_id')} "
+                                f"by user {post.get('user_id')} about seller {info_dict.get('seller', '')}"
+                            )
+                    except (json.JSONDecodeError, KeyError, TypeError) as e:
+                        # Skip invalid useful_info format
+                        agent_log.debug(f"Agent {self.social_agent_id} skipped invalid useful_info: {e}")
+                        continue
             
         # Combine environment observation and extra prompt
         user_msg_content = f"{env_prompt}"
@@ -382,6 +411,27 @@ class SocialAgent(ChatAgent):
         finally:
             if extra_action:
                 self.remove_tools(extra_action)
+        
+        # Only record useful_info when agent creates a post with valid useful_info
+        if action_result and isinstance(action_result, dict):
+            action_name = action_result.get('_action_name', '')
+            if action_name == 'create_post' and 'useful_info' in action_result:
+                useful_info = action_result.get('useful_info', '')
+                if useful_info:
+                    try:
+                        # Parse useful_info as JSON to validate format
+                        info_dict = json.loads(useful_info)
+                        # Only add to communication_memory if it's a valid FRAUD or HONEST record
+                        if info_dict.get('outcome') in ['FRAUD', 'HONEST']:
+                            self.communication_memory.append({
+                                "seller": info_dict.get('seller', ''),
+                                "outcome": info_dict.get('outcome', ''),
+                                "post_id": action_result.get('post_id'),
+                                "created_by": self.social_agent_id
+                            })
+                    except (json.JSONDecodeError, KeyError, TypeError):
+                        # Skip invalid useful_info format
+                        pass
         
         return action_result, action_reasoning
 

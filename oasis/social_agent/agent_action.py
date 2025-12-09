@@ -147,26 +147,23 @@ class SocialAction:
         """
         return await self.perform_action(None, ActionType.DO_NOTHING.value)
 
-    async def create_post(self, content: str):
-        r"""Create a new post with the given content.
+    async def create_post(self, content: str, useful_info: str):
+        r"""Create a new post that combines main content and extra useful info.
 
-        This method invokes an asynchronous action to create a new post based
-        on the provided content. Upon successful execution, it returns a
-        dictionary indicating success and the ID of the newly created post.
+        This method triggers an asynchronous action that submits both `content`
+        and `useful_info` to the platform. On success, it returns a response
+        dictionary describing whether the write succeeded and the ID of the newly
+        created post.
 
         Args:
-            content (str): The content of the post to be created.
-
+            content (str): Primary body of the post.
+            useful_info (str): Supplemental metadata or context to publish alongside.
         Returns:
-            dict: A dictionary with two key-value pairs. The 'success' key
-                maps to a boolean indicating whether the post creation was
-                successful. The 'post_id' key maps to the integer ID of the
-                newly created post.
-
-            Example of a successful return:
-            {'success': True, 'post_id': 50}
+            dict: Contains the keys `success` and `post_id`, e.g.
+                `{'success': True, 'post_id': 50}`.
         """
-        return await self.perform_action(content, ActionType.CREATE_POST.value)
+        create_post_message = (content, useful_info)
+        return await self.perform_action(create_post_message, ActionType.CREATE_POST.value)
 
     async def repost(self, post_id: int):
         r"""Repost a specified post.

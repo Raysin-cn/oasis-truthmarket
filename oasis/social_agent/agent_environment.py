@@ -98,27 +98,53 @@ class SocialEnvironment(Environment):
             conn.close()
         return listings
 
-    def get_posts_communication_for_env(self) -> str:
-        """Query all posts from database and format as string."""
+    def get_posts_communication_data(self) -> list:
+        """Query all posts from database and return raw data as list of dicts."""
         if not os.path.exists(self.db_path):
-            return "No posts are currently available."
+            return []
             
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
-        posts = "No posts are currently available."
+        posts_data = []
         try:
+            # Query all posts (excluding reposts, only original posts and quotes)
             cursor.execute(
-                "SELECT post_id, content FROM post WHERE status = 'on_sale' ORDER BY post_id DESC"
+                "SELECT post_id, user_id, content, useful_info, created_at, num_likes, num_dislikes "
+                "FROM post WHERE original_post_id IS NULL ORDER BY created_at DESC LIMIT 50"
             )
             posts = cursor.fetchall()
-            if posts:
-                posts_env = "Here is the list of posts currently available:\n"
-                for p in posts:
-                    posts_env += f"- Post ID: {p[0]}, Content: {p[1]}\n"
+            for p in posts:
+                posts_data.append({
+                    "post_id": p[0],
+                    "user_id": p[1],
+                    "content": p[2],
+                    "useful_info": p[3],
+                    "created_at": p[4],
+                    "num_likes": p[5],
+                    "num_dislikes": p[6]
+                })
         except sqlite3.Error as e:
-            print(f"Database query error (get_posts_communication_for_env): {e}")
+            print(f"Database query error (get_posts_communication_data): {e}")
         finally:
             conn.close()
+        return posts_data
+
+    def get_posts_communication_for_env(self) -> str:
+        """Query all posts from database and format as string."""
+        posts_data = self.get_posts_communication_data()
+        if not posts_data:
+            return "No posts are currently available."
+        if self.conditions == "siloed": # siloed mode: only show posts from itself and other buyers in the same silo
+            posts_data = [p for p in posts_data if p['user_id'] == self.action.agent_id]
+        elif self.conditions == "shared": # shared mode: show all posts from all buyers
+            posts_data = posts_data
+        posts_env = "Here is the list of recent posts from other buyers:\n"
+        for p in posts_data:
+            useful_info_str = f" (Useful Info: {p['useful_info']})" if p['useful_info'] else ""
+            posts_env += (
+                f"- Post ID: {p['post_id']}, User ID: {p['user_id']}, Content: {p['content']}{useful_info_str}, "
+                f"Likes: {p['num_likes']}, Dislikes: {p['num_dislikes']}\n"
+            )
         return posts_env
     
 
@@ -191,12 +217,8 @@ class SocialEnvironment(Environment):
         role = agent.user_info.profile.get("role")
         
         if market_phase == "communication":
-            posts = await self.action.refresh()
-            if posts["success"]:
-                posts_env = json.dumps(posts["posts"], indent=4)
-                posts_env = self.posts_env_template.substitute(posts=posts_env)
-            else:
-                posts_env = "After refreshing, there are no existing posts."
+            # Use direct database query instead of refresh() for communication phase
+            posts_env = self.get_posts_communication_for_env()
             return posts_env
         
         elif market_phase == "listing" and role == "seller":
