@@ -134,7 +134,7 @@ class SocialEnvironment(Environment):
         posts_data = self.get_posts_communication_data()
         if not posts_data:
             return "No posts are currently available."
-        if self.conditions == "siloed": # siloed mode: only show posts from itself and other buyers in the same silo
+        if self.conditions == "siloed": # siloed mode: only show posts from itself
             posts_data = [p for p in posts_data if p['user_id'] == self.action.agent_id]
         elif self.conditions == "shared": # shared mode: show all posts from all buyers
             posts_data = posts_data
